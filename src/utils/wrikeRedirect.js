@@ -1,7 +1,7 @@
 import { getCachedWrikeCredentials } from "./wrikeCredentials";
 
 export const findRedirectionURL = (
-  { accountId, redirectUri, autoRedirect, environment, environmentId, extra },
+  { accountId, redirectUri, environment, environmentId, environment_id, extra },
   fastify,
 ) => {
   try {
@@ -16,7 +16,13 @@ export const findRedirectionURL = (
     // Get credentials from cached DB values (API type)
     const allCreds = getCachedWrikeCredentials();
 
-    // Resolve environment: prioritize environmentId parameter, then environment parameter
+    // Resolve environment: prioritize environmentId parameter, then environment
+    // parameter. environment_id is accepted as an alias for environmentId —
+    // links generated elsewhere in this app use both conventions (e.g.
+    // src/routes/oauth/wellKnown.js builds `environment_id`, while
+    // src/routes/tokens/index.js builds `environmentId`), so either must
+    // auto-select correctly here.
+    environmentId = environmentId || environment_id;
     let selectedEnvironment = "";
     if (environmentId) {
       // Find environment by ID
