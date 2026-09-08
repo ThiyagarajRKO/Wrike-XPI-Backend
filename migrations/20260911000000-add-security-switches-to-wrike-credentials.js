@@ -15,20 +15,34 @@
  */
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.addColumn("wrike_credentials", "allowlist_check_enabled", {
-      type: Sequelize.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
-    });
-    await queryInterface.addColumn("wrike_credentials", "custom_field_check_enabled", {
-      type: Sequelize.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    });
+    await queryInterface.addColumn(
+      "wrike_credentials",
+      "allowlist_check_enabled",
+      {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+    );
+    await queryInterface.addColumn(
+      "wrike_credentials",
+      "custom_field_check_enabled",
+      {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+      },
+    );
   },
 
   down: async (queryInterface) => {
-    await queryInterface.removeColumn("wrike_credentials", "custom_field_check_enabled");
-    await queryInterface.removeColumn("wrike_credentials", "allowlist_check_enabled");
+    await queryInterface.removeColumn(
+      "wrike_credentials",
+      "custom_field_check_enabled",
+    );
+    await queryInterface.removeColumn(
+      "wrike_credentials",
+      "allowlist_check_enabled",
+    );
   },
 };
