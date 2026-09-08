@@ -32,9 +32,12 @@ export const registerDatahubTools = (server, serverUrl, auth) => {
     {
       description:
         "Return the Datahub field mapping metadata for campaign, channel, and task CRUD tools. " +
-        "Agents should call this first to discover valid field keys and their properties " +
+        "Agents should call this FIRST to discover valid field keys and their properties " +
         "(isCampaignField, isChannelField, isTaskField, isWritable, isReadable) before " +
-        "invoking update or create operations.",
+        "invoking update or create operations. The `key` values returned here are EXACTLY " +
+        "the keys to use in: (1) update/create formFields (e.g. { agency: 'X' }), and " +
+        "(2) list filter expressions. Wrike-native (wrike_*) tools do NOT understand these " +
+        "XPI keys — use them with the XPI campaign/channel/task/datahub tools only.",
       inputSchema: {
         includeMetadata: z
           .boolean()

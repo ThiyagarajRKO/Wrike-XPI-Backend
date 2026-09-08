@@ -122,7 +122,14 @@ export const registerCampaignTools = (server, fastify, serverUrl, auth) => {
     {
       description: "Read a single campaign by its Wrike folder ID.",
       inputSchema: {
-        campaignId: z.string().describe("The Wrike folder ID of the campaign"),
+        campaignId: z
+          .string()
+          .describe(
+            "Wrike API v4 ID of the campaign — an opaque id with NO fixed pattern or " +
+              "length; may look like MQAAAAELy_uV, MQAAAAELyuV, or IEAC7PRTI5OAO7EP " +
+              "(letters/digits, may include - or _). NOT the campaign name. Copy the " +
+              "exact id from a list/get result.",
+          ),
       },
       annotations: {
         title: "Get Campaign",
@@ -157,7 +164,16 @@ export const registerCampaignTools = (server, fastify, serverUrl, auth) => {
 
     {
       description:
-        "Create a campaign using the existing request-form workflow. Requires space, entity, variantId, and optional fields.",
+        "Create an XPI campaign via the environment's Wrike request-form workflow " +
+        "(NOT a raw Wrike folder create — prefer this over wrike_create_project_folder_item " +
+        "when the goal is an XPI campaign).\n\n" +
+        "  Required:\n" +
+        "    space      – Wrike space id that owns the campaign request form\n" +
+        "    entity     – the request-form entity/type configured for campaigns\n" +
+        "    variantId  – the request-form variant id to submit against\n" +
+        "  Optional:\n" +
+        "    fields          – campaign field values (see datahub_list_fields for valid keys)\n" +
+        "    isCreatedByURL  – true returns a pre-fill URL instead of submitting",
       inputSchema: {
         space: z.string().describe("Wrike space identifier"),
         entity: z.string().describe("Entity type for the request form"),
@@ -213,9 +229,22 @@ export const registerCampaignTools = (server, fastify, serverUrl, auth) => {
 
     {
       description:
-        "Update a campaign by its Wrike folder ID. Provide formFields as a key-value object of field names to values.",
+        "Update an XPI campaign (Wrike folder) by its Wrike folder ID. " +
+        "Pass formFields keyed by the campaign field SHORT CODES from " +
+        "datahub_list_fields (isCampaignField=true), e.g. " +
+        "{ campaignbudget: 50000, campaignenddate: '2026-12-31' }. Only keys " +
+        "marked isWritable are applied; Datahub-linked custom fields are " +
+        "resolved to record ids automatically; dates must be YYYY-MM-DD. " +
+        "Prefer this over wrike_update_items for XPI campaign data.",
       inputSchema: {
-        campaignId: z.string().describe("The Wrike folder ID of the campaign"),
+        campaignId: z
+          .string()
+          .describe(
+            "Wrike API v4 ID of the campaign — an opaque id with NO fixed pattern or " +
+              "length; may look like MQAAAAELy_uV, MQAAAAELyuV, or IEAC7PRTI5OAO7EP " +
+              "(letters/digits, may include - or _). NOT the campaign name. Copy the " +
+              "exact id from a list/get result.",
+          ),
         formFields: z
           .record(z.any())
           .default({})
@@ -257,7 +286,14 @@ export const registerCampaignTools = (server, fastify, serverUrl, auth) => {
     {
       description: "Delete a campaign by its Wrike folder ID.",
       inputSchema: {
-        campaignId: z.string().describe("The Wrike folder ID of the campaign"),
+        campaignId: z
+          .string()
+          .describe(
+            "Wrike API v4 ID of the campaign — an opaque id with NO fixed pattern or " +
+              "length; may look like MQAAAAELy_uV, MQAAAAELyuV, or IEAC7PRTI5OAO7EP " +
+              "(letters/digits, may include - or _). NOT the campaign name. Copy the " +
+              "exact id from a list/get result.",
+          ),
       },
       annotations: {
         title: "Delete Campaign",

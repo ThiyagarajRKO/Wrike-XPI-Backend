@@ -45,7 +45,12 @@ export const registerChannelTools = (server, serverUrl, auth) => {
       inputSchema: {
         campaignId: z
           .string()
-          .describe("The Wrike folder ID of the parent campaign"),
+          .describe(
+            "Wrike API v4 ID of the parent campaign — an opaque id with NO fixed pattern " +
+              "or length; may look like MQAAAAELy_uV, MQAAAAELyuV, or " +
+              "IEAC7PRTI5OAO7EP (letters/digits, may include - or _). NOT the campaign " +
+              "name. Copy the exact id from a campaign list/get result.",
+          ),
         filter: z
           .string()
           .optional()
@@ -96,7 +101,14 @@ export const registerChannelTools = (server, serverUrl, auth) => {
     {
       description: "Read a single channel by its Wrike task/folder ID.",
       inputSchema: {
-        channelId: z.string().describe("The Wrike ID of the channel"),
+        channelId: z
+          .string()
+          .describe(
+            "Wrike API v4 ID of the channel — an opaque id with NO fixed pattern or " +
+              "length; may look like MQAAAAELy_uV, MQAAAAELyuV, or IEAC7PRTI5OAO7EP " +
+              "(letters/digits, may include - or _). NOT the channel name. Copy the " +
+              "exact id from a list/get result.",
+          ),
       },
       annotations: {
         title: "Get Channel",
@@ -131,9 +143,20 @@ export const registerChannelTools = (server, serverUrl, auth) => {
 
     {
       description:
-        "Update a channel by its Wrike ID. Provide formFields as a key-value object of field names to values.",
+        "Update an XPI channel by its Wrike ID. Pass formFields keyed by the " +
+        "channel field SHORT CODES from datahub_list_fields (isChannelField=" +
+        "true), e.g. { channelname: 'TV Spot' }. Only writable keys are " +
+        "applied; dates must be YYYY-MM-DD. Prefer this over wrike_update_items " +
+        "for XPI channel data.",
       inputSchema: {
-        channelId: z.string().describe("The Wrike ID of the channel"),
+        channelId: z
+          .string()
+          .describe(
+            "Wrike API v4 ID of the channel — an opaque id with NO fixed pattern or " +
+              "length; may look like MQAAAAELy_uV, MQAAAAELyuV, or IEAC7PRTI5OAO7EP " +
+              "(letters/digits, may include - or _). NOT the channel name. Copy the " +
+              "exact id from a list/get result.",
+          ),
         formFields: z
           .record(z.any())
           .default({})
@@ -175,7 +198,14 @@ export const registerChannelTools = (server, serverUrl, auth) => {
     {
       description: "Delete a channel by its Wrike ID.",
       inputSchema: {
-        channelId: z.string().describe("The Wrike ID of the channel"),
+        channelId: z
+          .string()
+          .describe(
+            "Wrike API v4 ID of the channel — an opaque id with NO fixed pattern or " +
+              "length; may look like MQAAAAELy_uV, MQAAAAELyuV, or IEAC7PRTI5OAO7EP " +
+              "(letters/digits, may include - or _). NOT the channel name. Copy the " +
+              "exact id from a list/get result.",
+          ),
       },
       annotations: {
         title: "Delete Channel",
