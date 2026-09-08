@@ -1600,6 +1600,13 @@
         background: var(--border);
       }
 
+      /* Map Environment modal: these section titles sit beside a count pill
+         ("Mapped environments") or an action row, so the long filler rule
+         looks out of place — drop it with the .no-rule modifier. */
+      .form-section-label.no-rule::after {
+        content: none;
+      }
+
       /* Toggle switch */
       .toggle-row {
         display: flex;

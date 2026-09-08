@@ -1702,7 +1702,7 @@ export default function AdminDashboard() {
 
           <div className="modal-body" style={{ paddingBottom: 8 }}>
             {/* Mapped environments */}
-            <div className="form-section-label" style={{ marginBottom: 10 }}>
+            <div className="form-section-label no-rule" style={{ marginBottom: 10 }}>
               <i className="fa-solid fa-link" /> Mapped environments
               <span
                 style={{
@@ -1840,7 +1840,7 @@ export default function AdminDashboard() {
 
             {/* Map another environment */}
             <div>
-              <div className="form-section-label" style={{ marginBottom: 10 }}>
+              <div className="form-section-label no-rule" style={{ marginBottom: 10 }}>
                 <i className="fa-solid fa-plus-circle" /> Map another environment
               </div>
 
