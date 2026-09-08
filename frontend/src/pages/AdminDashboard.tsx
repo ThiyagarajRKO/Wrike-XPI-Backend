@@ -28,8 +28,7 @@ import {
 } from "../lib/adminApi";
 import EnvironmentAccess from "./EnvironmentAccess";
 import PortalUserPermissions from "./PortalUserPermissions";
-import ActivityLog from "./ActivityLog";
-import { EnvironmentsTable } from "./admin/EnvironmentsTable";
+import ActivityLog from "./ActivityLog";import { EnvironmentsTable } from "./admin/EnvironmentsTable";
 import { PortalUsersTable } from "./admin/PortalUsersTable";
 import { CopyButton } from "../components/ui/CopyButton";
 import { ActiveBadge } from "../components/ui/Badge";
@@ -182,6 +181,9 @@ export default function AdminDashboard() {
   const [activePage, setActivePage] = useHashPage<PageId>(PAGE_IDS, "overview");
 
   const [refreshing, setRefreshing] = useState(false);
+  // Bumped every time the top-bar Refresh is hit while the Activity Log page
+  // is open; passed to <ActivityLog> so it re-fetches rows + summary.
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
 
   /* ── Environments ─────────────────────────────────────────────────── */
   const [environments, setEnvironments] = useState<AdminEnvironment[]>([]);
@@ -884,14 +886,23 @@ export default function AdminDashboard() {
 
   function handleRefresh() {
     setRefreshing(true);
-    const refreshPromise =
-      activePage === "cache-settings"
-        ? loadCacheEntries(cacheSearchPatternRef.current)
-        : activePage === "users"
-          ? loadPortalUsers()
-          : loadEnvironments();
+    let refreshPromise;
+    if (activePage === "cache-settings") {
+      refreshPromise = loadCacheEntries(cacheSearchPatternRef.current);
+    } else if (activePage === "users") {
+      refreshPromise = loadPortalUsers();
+    } else if (activePage === "activity-log") {
+      // The Activity Log owns its own fetch (rows + summary) — bump its key
+      // and let the child reload the current page.
+      setActivityRefreshKey((k) => k + 1);
+      refreshPromise = Promise.resolve();
+    } else {
+      refreshPromise = loadEnvironments();
+    }
 
-    Promise.resolve(refreshPromise).finally(() => setTimeout(() => setRefreshing(false), 600));
+    Promise.resolve(refreshPromise).finally(() =>
+      setTimeout(() => setRefreshing(false), 600),
+    );
   }
 
   async function handleLogout() {
@@ -1304,7 +1315,11 @@ export default function AdminDashboard() {
 
           {/* ══════ ACTIVITY LOG PAGE ══════ */}
           <div className={`page${activePage === "activity-log" ? " active" : ""}`} id="page-activity-log">
-            <ActivityLog environments={environments} active={activePage === "activity-log"} />
+            <ActivityLog
+              environments={environments}
+              active={activePage === "activity-log"}
+              refreshKey={activityRefreshKey}
+            />
           </div>
         </div>
       </div>

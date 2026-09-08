@@ -106,6 +106,8 @@ function ActivityPayloadBlock({ title, payload }: { title: string; payload: unkn
 interface Props {
   environments: AdminEnvironment[];
   active: boolean;
+  /** Incremented by the top-bar Refresh button to force a reload. */
+  refreshKey?: number;
 }
 
 /**
@@ -114,7 +116,7 @@ interface Props {
  * kept forever. Every row here ages out on its own; see the retention note
  * in the header, sourced from the same config the background sweep reads.
  */
-export default function ActivityLog({ environments, active }: Props) {
+export default function ActivityLog({ environments, active, refreshKey = 0 }: Props) {
   const [config, setConfig] = useState<ActivityConfig | null>(null);
   const [summary, setSummary] = useState<ActivitySummary | null>(null);
   const [rows, setRows] = useState<ActivityRow[]>([]);
@@ -170,6 +172,14 @@ export default function ActivityLog({ environments, active }: Props) {
     load(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, envFilter, surfaceFilter, resultFilter, pageSize]);
+
+  // Top-bar Refresh — reload the current page (keeps filters + page) and the
+  // summary stats without resetting the view.
+  useEffect(() => {
+    if (!active || refreshKey === 0) return;
+    load(offset);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, refreshKey]);
 
   // Email search is free text — debounce it instead of firing on every
   // keystroke.
