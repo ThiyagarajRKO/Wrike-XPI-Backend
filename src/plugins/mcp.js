@@ -6,6 +6,11 @@ const {
 } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { createMcpServer } = require("../mcp/index.js");
 const { resolveAuth } = require("../mcp/tools/auth.js");
+const { connectionDenialBody } = require("../mcp/toolGuard.js");
+const {
+  resolveAccessContext,
+  isEnforced,
+} = require("../utils/accessControl.js");
 
 /**
  * Fastify plugin that exposes the MCP (Model Context Protocol) endpoint.
@@ -51,6 +56,41 @@ module.exports = async function (fastify, opts) {
     if (!auth) {
       return sendUnauthorized(reply, "Token is invalid or expired", resourceMetadataUrl);
     }
+
+    // Authorization, immediately after token validation. The allow list and
+    // the Xtend API flag decide whether this caller gets an MCP server at
+    // all; the CRUD grant that comes back rides along on `auth` and is
+    // enforced per tool (see src/mcp/toolGuard.js).
+    let access;
+    try {
+      access = await resolveAccessContext({
+        envId: auth.envId,
+        environmentName: auth.environmentName,
+        wrikeToken: auth.wrikeToken,
+      });
+    } catch (err) {
+      // Fail closed, same as the REST path.
+      return reply.code(403).send({
+        error: "forbidden",
+        error_description: "Access could not be verified for this token.",
+        code: "AUTHORIZATION_ERROR",
+      });
+    }
+
+    if (!access.allowed && isEnforced()) {
+      return reply.code(403).send(connectionDenialBody(access));
+    }
+
+    // In audit mode (ACCESS_CONTROL_ENABLED=false) a refused caller still
+    // connects, with whatever grants were resolved, so an allow list can be
+    // built from real traffic before it is switched on.
+    auth.access = access.allowed
+      ? { ...access, environmentName: auth.environmentName }
+      : {
+          ...access,
+          environmentName: auth.environmentName,
+          permissions: { read: true, create: true, update: true, delete: true },
+        };
 
     if (typeof reply.hijack === "function") reply.hijack();
 

@@ -1,0 +1,523 @@
+/* User permissions drawer.
+   Tokens, radii and type all come from AdminDashboard.css — nothing new is
+   defined here. Every class is `up-` prefixed so it cannot collide with the
+   shell it opens over. */
+
+.up-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s ease;
+}
+
+.up-scrim.open {
+  visibility: visible;
+  opacity: 1;
+}
+
+.up-drawer {
+  width: min(760px, 100vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.16);
+  transform: translateX(16px);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.up-scrim.open .up-drawer {
+  transform: none;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+
+.up-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.up-header-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.up-avatar {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.up-identity {
+  min-width: 0;
+}
+
+.up-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.up-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.up-close {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.up-close:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.up-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Body ───────────────────────────────────────────────────────────── */
+
+.up-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.up-section {
+  margin-bottom: 26px;
+}
+
+.up-section:last-child {
+  margin-bottom: 0;
+}
+
+.up-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.up-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.up-section-title i {
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.up-section-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* ── Environment scope ──────────────────────────────────────────────── */
+
+.up-scope-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.up-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.up-scope-chip i {
+  font-size: 10px;
+  color: var(--accent);
+}
+
+/* Scope is the precondition for everything below it, so an empty scope is a
+   warning rather than a neutral empty state. */
+.up-scope-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.up-scope-empty i {
+  color: var(--warning);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Roles ──────────────────────────────────────────────────────────── */
+
+.up-role-pill {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.up-role-pill.up-custom {
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.up-roles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.up-role {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 12px 13px;
+  text-align: left;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.up-role:hover {
+  border-color: var(--accent);
+}
+
+.up-role:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.up-role[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.up-role-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.up-role-title i {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.up-role-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.up-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ── Matrix ─────────────────────────────────────────────────────────── */
+
+.up-matrix-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.up-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.up-matrix th,
+.up-matrix td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border-light);
+  text-align: left;
+}
+
+.up-matrix thead th {
+  background: var(--bg-surface);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.up-matrix tbody tr:last-child th,
+.up-matrix tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.up-matrix tbody tr:hover {
+  background: var(--bg-surface);
+}
+
+.up-col {
+  width: 78px;
+  text-align: center !important;
+}
+
+.up-module {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 400;
+  min-width: 240px;
+}
+
+.up-module-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.up-module-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.up-module-desc {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* Custom tick: the native checkbox stays as the real control (keyboard,
+   forms, screen readers) and is visually replaced, never removed. */
+.up-cell {
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.up-cell input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.up-tick {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: transparent;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.up-cell input:checked + .up-tick {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+}
+
+.up-cell:hover .up-tick {
+  border-color: var(--accent);
+}
+
+.up-cell input:focus-visible + .up-tick {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.up-na {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.up-rowtoggle {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.up-rowtoggle:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.up-rowtoggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────── */
+
+.up-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+  flex-shrink: 0;
+}
+
+.up-footer-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.up-footer-state i {
+  font-size: 7px;
+  color: var(--warning);
+}
+
+.up-footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* ── Loading ────────────────────────────────────────────────────────── */
+
+.up-skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.up-skeleton {
+  height: 42px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-surface-2) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Paced and linear: an eased sweep visibly stalls at each end, which reads
+     as the load having hung. The 300ms UI budget governs reactions to input,
+     not an ambient loop like this. */
+  .up-skeleton {
+    animation: upShimmer 1.2s linear infinite;
+  }
+
+  @keyframes upShimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .up-roles {
+    grid-template-columns: 1fr;
+  }
+}

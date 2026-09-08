@@ -97,6 +97,40 @@ export const getUserData = async (access_token) => {
   }
 };
 
+/**
+ * The caller's own contact, with custom fields attached.
+ *
+ * Separate from getUserData() on purpose: the authorization layer
+ * (src/utils/accessControl.js) needs the "Xtend API" custom field, and
+ * asking for customFields on every existing /profile call would slow down a
+ * path that has never needed them.
+ */
+export const getUserProfileWithCustomFields = async (access_token) => {
+  try {
+    const fields = encodeURIComponent(JSON.stringify(["customFields"]));
+
+    const userData = await GetResponse(
+      `${process.env.WRIKE_ENDPOINT}/contacts?me&fields=${fields}`,
+      "GET",
+      {
+        "content-type": "application/json",
+        authorization: "Bearer " + access_token,
+      },
+      null,
+    );
+
+    if (userData?.errorDescription) throw userData;
+
+    return userData;
+  } catch (err) {
+    console.log(
+      "Error while getting user profile with custom fields: ",
+      err?.message ?? err,
+    );
+    throw err;
+  }
+};
+
 // Datahub Util Functions
 export const getDatahubFields = async (wrikeToken, databaseId) => {
   try {

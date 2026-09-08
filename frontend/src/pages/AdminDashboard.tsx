@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminLogout, clearAdminSession, getAccessToken } from "../lib/authApi";
 import { fetchAppConfig, type AppConfig } from "../lib/appConfig";
 import { useHashPage } from "../lib/useHashPage";
@@ -24,14 +24,27 @@ import {
   type CacheEntry,
   type PortalUser,
 } from "../lib/adminApi";
+import {
+  getPermissionOverview,
+  type MatrixSummary,
+} from "../lib/permissionsApi";
+import AccessControl from "./AccessControl";
+import UserPermissions from "./UserPermissions";
 import "./AdminDashboard.css";
 
-type PageId = "overview" | "environments" | "users" | "settings" | "cache-settings";
+type PageId =
+  | "overview"
+  | "environments"
+  | "users"
+  | "user-permissions"
+  | "settings"
+  | "cache-settings";
 
 const PAGE_NAMES: Record<PageId, string> = {
   overview: "Overview",
   environments: "Environments",
   users: "Users",
+  "user-permissions": "Permissions",
   settings: "Settings",
   "cache-settings": "Cache Settings",
 };
@@ -233,7 +246,7 @@ const ENV_TABLE_HEAD = `
       <th>Last Updated</th>
       <th>Visibility</th>
       <th>Status</th>
-      <th style="width: 140px">Actions</th>
+      <th style="width: 172px">Actions</th>
     </tr>
   </thead>
 `;
@@ -248,7 +261,19 @@ const PU_TABLE_HEAD = `
       <th>Last Login</th>
       <th>Status</th>
       <th>Must Change Pwd</th>
-      <th style="width: 110px">Actions</th>
+      <th style="width: 150px">Actions</th>
+    </tr>
+  </thead>
+`;
+
+const PERMS_TABLE_HEAD = `
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Role</th>
+      <th>Environment scope</th>
+      <th>Modules granted</th>
+      <th style="width: 120px">Actions</th>
     </tr>
   </thead>
 `;
@@ -301,6 +326,11 @@ function envRowHtml(env: AdminEnvironment): string {
     "</td>" +
     "<td>" +
     '<div class="action-cell">' +
+    '<button class="icon-btn access-btn" data-id="' +
+    env.id +
+    '" title="Manage API access">' +
+    '<i class="fa-solid fa-shield-halved"></i>' +
+    "</button>" +
     '<button class="icon-btn edit-btn" data-id="' +
     env.id +
     '" title="Edit environment">' +
@@ -351,6 +381,9 @@ function puRowHtml(u: PortalUser): string {
       : '<span class="badge badge-success"><i class="fa-solid fa-check"></i> Set</span>') +
     "</td>" +
     '<td><div style="display:flex;gap:6px;align-items:center;">' +
+    '<button class="icon-btn pu-perms-btn" data-id="' +
+    u.id +
+    '" title="View permissions"><i class="fa-solid fa-shield-halved"></i></button>' +
     '<button class="icon-btn pu-edit-btn" data-id="' +
     u.id +
     '" title="Edit User"><i class="fa-solid fa-pen-to-square"></i></button>' +
@@ -377,6 +410,62 @@ function puRowHtml(u: PortalUser): string {
     (u.is_active ? "fa-ban" : "fa-circle-check") +
     '"></i></button>' +
     "</div></td>" +
+    "</tr>"
+  );
+}
+
+function permsRoleBadge(role: string | null): string {
+  if (!role) {
+    return '<span class="badge" style="background:var(--bg-surface-2);color:var(--text-secondary);border:1px solid var(--border);"><i class="fa-solid fa-sliders"></i> Custom</span>';
+  }
+  const map: Record<string, [string, string]> = {
+    no_access: ["badge-danger", "fa-ban"],
+    viewer: ["badge-info", "fa-eye"],
+    contributor: ["badge-warning", "fa-pen"],
+    administrator: ["badge-success", "fa-user-shield"],
+  };
+  const [cls, icon] = map[role] || ["badge-info", "fa-circle"];
+  const label = role
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+  return `<span class="badge ${cls}"><i class="fa-solid ${icon}"></i> ${label}</span>`;
+}
+
+function permsRowHtml(u: PortalUser, summary?: MatrixSummary, envCount = 0): string {
+  const counts = summary
+    ? Object.values(summary.permissions).reduce(
+        (acc, row) => acc + Object.values(row).filter(Boolean).length,
+        0,
+      )
+    : 0;
+
+  // Scope is the precondition for every grant, so an empty scope is called
+  // out here rather than left for the admin to infer from a zero elsewhere.
+  const scope =
+    envCount > 0
+      ? `<span class="badge badge-info"><i class="fa-solid fa-layer-group"></i> ${envCount} environment${envCount === 1 ? "" : "s"}</span>`
+      : '<span class="badge badge-warning"><i class="fa-solid fa-triangle-exclamation"></i> No scope</span>';
+
+  return (
+    "<tr>" +
+    "<td><strong>" +
+    escHtml(u.full_name || u.username) +
+    "</strong>" +
+    (u.email ? '<div style="font-size:11.5px;color:var(--text-muted);">' + escHtml(u.email) + "</div>" : "") +
+    "</td>" +
+    "<td>" +
+    permsRoleBadge(summary ? summary.role : null) +
+    "</td>" +
+    "<td>" +
+    scope +
+    "</td>" +
+    '<td style="font-size:12.5px;color:var(--text-secondary);">' +
+    (counts > 0 ? counts + " granted" : '<span style="color:var(--text-muted)">Nothing granted</span>') +
+    "</td>" +
+    '<td><button class="btn btn-ghost btn-sm perms-open-btn" data-id="' +
+    u.id +
+    '"><i class="fa-solid fa-sliders"></i>&nbsp;Manage</button></td>' +
     "</tr>"
   );
 }
@@ -495,7 +584,6 @@ export default function AdminDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activePage, setActivePage] = useHashPage<PageId>(PAGE_IDS, "overview");
-  const [settingsExpanded, setSettingsExpanded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   /* ── Environments ─────────────────────────────────────────────────── */
@@ -503,6 +591,15 @@ export default function AdminDashboard() {
   const [envLoaded, setEnvLoaded] = useState(false);
   const envTableContainerRef = useRef<HTMLDivElement>(null);
   const envDataTableRef = useRef<any>(null);
+
+  // API access is a drawer over the environment list, not a page — the
+  // environment is whichever row's shield button was clicked.
+  const [accessDrawerEnvId, setAccessDrawerEnvId] = useState<string | null>(null);
+  const [accessDrawerOpen, setAccessDrawerOpen] = useState(false);
+
+  // Same pattern for the per-user permission drawer, opened from a user row.
+  const [permsUserId, setPermsUserId] = useState<string | null>(null);
+  const [permsOpen, setPermsOpen] = useState(false);
 
   const loadEnvironments = async () => {
     window.NProgress?.start();
@@ -623,13 +720,18 @@ export default function AdminDashboard() {
     const onDelete = function (this: HTMLElement) {
       confirmDeleteEnvironment($(this).data("id"), $(this).data("name"));
     };
+    const onAccess = function (this: HTMLElement) {
+      goToApiAccess(String($(this).data("id")));
+    };
 
     $(container).on("click", ".copy-id-btn", onCopy);
+    $(container).on("click", ".access-btn", onAccess);
     $(container).on("click", ".edit-btn", onEdit);
     $(container).on("click", ".dup-btn", onDup);
     $(container).on("click", ".delete-btn", onDelete);
     return () => {
       $(container).off("click", ".copy-id-btn", onCopy);
+      $(container).off("click", ".access-btn", onAccess);
       $(container).off("click", ".edit-btn", onEdit);
       $(container).off("click", ".dup-btn", onDup);
       $(container).off("click", ".delete-btn", onDelete);
@@ -666,12 +768,17 @@ export default function AdminDashboard() {
     const onDup = function (this: HTMLElement) {
       openDuplicateModal($(this).data("id"));
     };
+    const onAccess = function (this: HTMLElement) {
+      goToApiAccess(String($(this).data("id")));
+    };
 
     $(container).on("click", ".copy-id-btn", onCopy);
+    $(container).on("click", ".access-btn", onAccess);
     $(container).on("click", ".edit-btn", onEdit);
     $(container).on("click", ".dup-btn", onDup);
     return () => {
       $(container).off("click", ".copy-id-btn", onCopy);
+      $(container).off("click", ".access-btn", onAccess);
       $(container).off("click", ".edit-btn", onEdit);
       $(container).off("click", ".dup-btn", onDup);
     };
@@ -943,11 +1050,17 @@ export default function AdminDashboard() {
       puToggleStatus($(this).data("id"), nextActive === true || nextActive === "true");
     };
 
+    const onPerms = function (this: HTMLElement) {
+      openUserPermissions(String($(this).data("id")));
+    };
+
+    $(container).on("click", ".pu-perms-btn", onPerms);
     $(container).on("click", ".pu-edit-btn", onEdit);
     $(container).on("click", ".pu-reset-btn", onReset);
     $(container).on("click", ".pu-assign-btn", onAssign);
     $(container).on("click", ".pu-toggle-btn", onToggle);
     return () => {
+      $(container).off("click", ".pu-perms-btn", onPerms);
       $(container).off("click", ".pu-edit-btn", onEdit);
       $(container).off("click", ".pu-reset-btn", onReset);
       $(container).off("click", ".pu-assign-btn", onAssign);
@@ -1138,6 +1251,108 @@ export default function AdminDashboard() {
       toast(err?.message, "error");
     }
   }
+
+  /* ── Permissions overview (Users > Permissions) ──────────────────── */
+  const permsTableContainerRef = useRef<HTMLDivElement>(null);
+  const permsDataTableRef = useRef<any>(null);
+  const [permsSummaries, setPermsSummaries] = useState<Record<string, MatrixSummary>>({});
+  const [permsEnvCounts, setPermsEnvCounts] = useState<Record<string, number>>({});
+
+  const loadPermissionOverview = useCallback(async () => {
+    if (!puUsers.length) return;
+    try {
+      const data = await getPermissionOverview(puUsers.map((u) => u.id));
+      setPermsSummaries(data || {});
+    } catch {
+      // The matrix column is supporting detail — a failure here leaves the
+      // table usable rather than blanking the whole page.
+    }
+  }, [puUsers]);
+
+  // Environment scope comes from ownership already loaded for the env table,
+  // so it needs no extra request.
+  useEffect(() => {
+    const counts: Record<string, number> = {};
+    for (const env of environments) {
+      if (env.owner_id) counts[env.owner_id] = (counts[env.owner_id] || 0) + 1;
+    }
+    setPermsEnvCounts(counts);
+  }, [environments]);
+
+  useEffect(() => {
+    if (activePage === "user-permissions") loadPermissionOverview();
+  }, [activePage, loadPermissionOverview]);
+
+  useEffect(() => {
+    const $ = window.jQuery;
+    const container = permsTableContainerRef.current;
+    if (!$ || !container || activePage !== "user-permissions") return;
+
+    if (permsDataTableRef.current) {
+      permsDataTableRef.current.destroy();
+      permsDataTableRef.current = null;
+    }
+
+    const $container = $(container).empty();
+
+    if (!puUsers.length) {
+      $container.html(
+        `<table class="dt" id="permsTable">${PERMS_TABLE_HEAD}<tbody>` +
+          '<tr><td colspan="5">' +
+          '<div class="empty-state">' +
+          '<div class="empty-state-icon"><i class="fa-solid fa-shield-halved"></i></div>' +
+          "<h3>No users yet</h3>" +
+          "<p>Add a portal user under Directory, then set what they can do here.</p>" +
+          "</div></td></tr></tbody></table>",
+      );
+      return;
+    }
+
+    const rowsHtml = puUsers
+      .map((u) => permsRowHtml(u, permsSummaries[u.id], permsEnvCounts[u.id] || 0))
+      .join("");
+    $container.html(
+      `<table class="dt" id="permsTable">${PERMS_TABLE_HEAD}<tbody>${rowsHtml}</tbody></table>`,
+    );
+
+    permsDataTableRef.current = $container.find("#permsTable").DataTable({
+      pageLength: 10,
+      lengthMenu: [5, 10, 25, 50],
+      order: [],
+      columnDefs: [{ targets: 4, orderable: false, searchable: false }],
+      language: {
+        emptyTable: "No users found",
+        zeroRecords: "No matching users",
+        lengthMenu: "Show _MENU_ rows",
+        search: "",
+        searchPlaceholder: "Search users…",
+        info: "Showing _START_–_END_ of _TOTAL_",
+        paginate: { previous: "‹", next: "›" },
+      },
+    });
+
+    const layoutTimer = setTimeout(() => {
+      restructureDataTableWrapper($, "#permsTable", container);
+    }, 10);
+
+    return () => clearTimeout(layoutTimer);
+  }, [activePage, puUsers, permsSummaries, permsEnvCounts]);
+
+  useEffect(() => {
+    const $ = window.jQuery;
+    const container = permsTableContainerRef.current;
+    if (!$ || !container) return;
+
+    const onOpen = function (this: HTMLElement) {
+      openUserPermissions(String($(this).data("id")));
+    };
+
+    $(container).on("click", ".perms-open-btn", onOpen);
+    return () => {
+      $(container).off("click", ".perms-open-btn", onOpen);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [puUsers, activePage]);
 
   /* ── Assign environments modal ───────────────────────────────────── */
   const [puAssignModalOpen, setPuAssignModalOpen] = useState(false);
@@ -1495,13 +1710,24 @@ export default function AdminDashboard() {
   }, []);
 
   /* ── Navigation ───────────────────────────────────────────────────── */
-  function handleNav(pageId: PageId, isSubmenuItem = false) {
+  function handleNav(pageId: PageId) {
     setActivePage(pageId);
-    if (isSubmenuItem) setSettingsExpanded(true);
     setMobileOpen(false);
 
-    if (pageId === "users") loadPortalUsers();
+    if (pageId === "users" || pageId === "user-permissions") loadPortalUsers();
     if (pageId === "cache-settings") loadCacheEntries(cacheSearchPatternRef.current);
+  }
+
+  // Opens the API access drawer over whatever page the admin is on, scoped to
+  // the environment whose row was clicked.
+  function goToApiAccess(envId: string) {
+    setAccessDrawerEnvId(envId);
+    setAccessDrawerOpen(true);
+  }
+
+  function openUserPermissions(userId: string) {
+    setPermsUserId(userId);
+    setPermsOpen(true);
   }
 
   function handleRefresh() {
@@ -1612,30 +1838,28 @@ export default function AdminDashboard() {
             <span className="nl">Users</span>
           </div>
 
-          <div className={`nav-parent${settingsExpanded ? " expanded" : ""}`}>
-            <div
-              className={`nav-item nav-parent-toggle${activePage === "cache-settings" ? " submenu-active" : ""}`}
-              onClick={() => setSettingsExpanded((v) => !v)}
-            >
-              <span className="ni">
-                <i className="fa-solid fa-sliders" />
-              </span>
-              <span className="nl">Settings</span>
-              <span className="nav-caret">
-                <i className="fa-solid fa-chevron-down" />
-              </span>
-            </div>
-            <div className="nav-submenu">
-              <div
-                className={`nav-item nav-submenu-item${activePage === "cache-settings" ? " active" : ""}`}
-                onClick={() => handleNav("cache-settings", true)}
-              >
-                <span className="ni">
-                  <i className="fa-solid fa-database" />
-                </span>
-                <span className="nl">Cache Settings</span>
-              </div>
-            </div>
+          <div
+            className={`nav-item${activePage === "user-permissions" ? " active" : ""}`}
+            onClick={() => handleNav("user-permissions")}
+          >
+            <span className="ni">
+              <i className="fa-solid fa-shield-halved" />
+            </span>
+            <span className="nl">Permissions</span>
+          </div>
+
+          <div className="nav-group-label" style={{ marginTop: 6 }}>
+            Settings
+          </div>
+
+          <div
+            className={`nav-item${activePage === "cache-settings" ? " active" : ""}`}
+            onClick={() => handleNav("cache-settings")}
+          >
+            <span className="ni">
+              <i className="fa-solid fa-database" />
+            </span>
+            <span className="nl">Cache Settings</span>
           </div>
         </div>
 
@@ -1784,6 +2008,9 @@ export default function AdminDashboard() {
                           <td dangerouslySetInnerHTML={{ __html: badgeHtml(env.is_active) }} />
                           <td>
                             <div className="action-cell">
+                              <button className="icon-btn access-btn" data-id={env.id} title="Manage API access">
+                                <i className="fa-solid fa-shield-halved" />
+                              </button>
                               <button className="icon-btn edit-btn" data-id={env.id} title="Edit environment">
                                 <i className="fa-solid fa-pen-to-square" />
                               </button>
@@ -1865,6 +2092,27 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* ══════ USER PERMISSIONS PAGE ══════ */}
+          <div
+            className={`page${activePage === "user-permissions" ? " active" : ""}`}
+            id="page-user-permissions"
+          >
+            <div className="section-header">
+              <div>
+                <div className="section-title">Permissions</div>
+                <div className="section-subtitle">
+                  What each portal user can do, and where it applies
+                </div>
+              </div>
+            </div>
+
+            <div className="card">
+              <div className="card-body">
+                <div className="table-wrapper" style={{ marginTop: 0 }} ref={permsTableContainerRef} />
+              </div>
+            </div>
+          </div>
+
           {/* ══════ CACHE SETTINGS PAGE ══════ */}
           <div className={`page${activePage === "cache-settings" ? " active" : ""}`} id="page-cache-settings">
             <div className="section-header">
@@ -1889,6 +2137,22 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* ═══════════ API ACCESS DRAWER ═══════════ */}
+      <AccessControl
+        environments={environments}
+        envId={accessDrawerEnvId}
+        open={accessDrawerOpen}
+        onClose={() => setAccessDrawerOpen(false)}
+      />
+
+      {/* ═══════════ USER PERMISSIONS DRAWER ═══════════ */}
+      <UserPermissions
+        userId={permsUserId}
+        open={permsOpen}
+        onClose={() => setPermsOpen(false)}
+        onSaved={loadPermissionOverview}
+      />
 
       {/* ═══════════ PU: ADD USER MODAL ═══════════ */}
       <div className={`modal-backdrop${puAddModalOpen ? " open" : ""}`}>

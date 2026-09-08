@@ -156,6 +156,10 @@ export const ValidateToken = async (req, reply, fastify) => {
     // Store token for route handlers
     req.wrikeToken = accessToken;
     req.environmentName = token.environment_name;
+    // Needed by the authorization hook that runs next (see
+    // src/middlewares/apiAuthorization.js) — allow-list rules and permission
+    // grants are both scoped to the environment the token was minted for.
+    req.envId = token.env_id;
   } catch (err) {
     console.error(new Date().toISOString(), err);
     reply.code(401).send({
@@ -195,6 +199,9 @@ const resolveAuth = async (token, dek) => {
   return {
     wrikeToken: accessToken,
     environmentName: token.environment_name,
+    // Carried so the MCP layer can scope authorization to the same
+    // environment the token belongs to (src/plugins/mcp.js).
+    envId: token.env_id,
   };
 };
 

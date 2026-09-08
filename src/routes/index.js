@@ -10,6 +10,7 @@ import { adminApiRoute } from "./admin";
 import { portalApiRoute } from "./portal";
 // Auth Middleware
 import { ValidateToken } from "../middlewares/authentication";
+import { AuthorizeRequest } from "../middlewares/apiAuthorization";
 
 // MCP Plugin
 import mcpPlugin from "../plugins/mcp";
@@ -77,10 +78,46 @@ export const PublicRouters = (fastify, opts, done) => {
 
 //Protected Routes
 export const PrivateRouters = (fastify, opts, done) => {
-  // Validating Token
+  // 1. Authentication — is this a valid token, and whose is it?
   fastify.addHook("onRequest", (req, reply) =>
     ValidateToken(req, reply, fastify),
   );
+
+  // 2. Authorization — is that person allowed to do this, in this
+  //    environment? Allow list, Xtend API flag, then the CRUD grant.
+  fastify.addHook("onRequest", AuthorizeRequest);
+
+  // Deliberately reachable to an authenticated caller the gates would
+  // otherwise refuse (see ALWAYS_ALLOWED in the authorization middleware):
+  // it is how an integration finds out *why* it is being turned away, and
+  // what it is actually allowed to do, without anyone reading server logs.
+  // It exposes only the caller's own identity and grants.
+  fastify.get("/wrikexpi/whoami", async (req, reply) => {
+    const access = req.access || {};
+
+    return reply.code(200).send({
+      success: true,
+      data: {
+        email: access.email || null,
+        display_name: access.displayName || null,
+        environment: req.environmentName || null,
+        authorized: !!access.allowed,
+        reason: access.allowed ? null : access.code || null,
+        message: access.allowed ? null : access.message || null,
+        permissions: access.permissions || {
+          read: false,
+          create: false,
+          update: false,
+          delete: false,
+        },
+        checks: (access.gates || []).map((g) => ({
+          check: g.label,
+          status: g.status,
+          detail: g.detail,
+        })),
+      },
+    });
+  });
 
   fastify.register(campaignRoute, { prefix: "/wrikexpi/campaign" });
   fastify.register(channelRoute, { prefix: "/wrikexpi/channel" });

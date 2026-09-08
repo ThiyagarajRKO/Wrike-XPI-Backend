@@ -4,6 +4,7 @@ import { registerChannelTools } from "./tools/channel.js";
 import { registerTaskTools } from "./tools/task.js";
 import { registerDatahubTools } from "./tools/datahub.js";
 import { registerWrikeProxyTools } from "./wrikeMcpProxy.js";
+import { applyToolAuthorization } from "./toolGuard.js";
 import wrikeIconDataUri from "./wrikeIcon.js";
 
 /**
@@ -38,6 +39,11 @@ export const createMcpServer = async (fastify, serverUrl, auth) => {
       },
     },
   );
+
+  // Must precede every registerTool() below — it wraps the registration
+  // function itself so each tool is checked against the caller's CRUD grant.
+  // auth.access is resolved once per request in src/plugins/mcp.js.
+  applyToolAuthorization(server, auth?.access);
 
   registerCampaignTools(server, fastify, serverUrl, auth);
   registerChannelTools(server, serverUrl, auth);
