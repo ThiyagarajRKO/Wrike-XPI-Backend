@@ -14,7 +14,7 @@ const {
 const { log: logActivity } = require("../utils/activityLog.js");
 const {
   captureRequest,
-  buildResponseSnapshot,
+  // buildResponseSnapshot, // response-payload capture disabled for now
 } = require("../utils/capture.js");
 
 /**
@@ -37,23 +37,17 @@ module.exports = async function (fastify, opts) {
   // Capture the response for non-hijacked MCP replies (the authorised
   // streaming path never reaches onSend — those rows carry no response
   // payload, and the UI shows "not captured" for them).
-  fastify.addHook("onSend", (req, reply, payload, done) => {
-    try {
-      if (
-        payload !== undefined &&
-        payload !== null &&
-        typeof payload !== "function"
-      ) {
-        req.activityResponsePayload = buildResponseSnapshot(
-          reply.statusCode,
-          payload,
-        );
-      }
-    } catch {
-      req.activityResponsePayload = null;
-    }
-    done();
-  });
+  // Response-payload capture disabled for now (kept in git history).
+  // fastify.addHook("onSend", (req, reply, payload, done) => {
+  //   try {
+  //     if (payload !== undefined && payload !== null && typeof payload !== "function") {
+  //       req.activityResponsePayload = buildResponseSnapshot(reply.statusCode, payload);
+  //     }
+  //   } catch {
+  //     req.activityResponsePayload = null;
+  //   }
+  //   done();
+  // });
 
   const sendUnauthorized = (reply, description, resourceMetadataUrl) => {
     reply
@@ -97,7 +91,7 @@ module.exports = async function (fastify, opts) {
         ip: clientIp(req),
         category: "mcp",
         requestPayload: captureRequest(req),
-        responsePayload: req.activityResponsePayload || null,
+        // responsePayload: req.activityResponsePayload || null, // disabled for now
       });
 
     const authHeader = req.headers.authorization || "";

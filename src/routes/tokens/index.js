@@ -6,7 +6,10 @@ import { WrikeTokenExchangeSchema } from "./schema/wrikeTokenExchange";
 import { GetUserDataSchema } from "./schema/getUserData";
 import { ValidateJWT } from "../../middlewares/authentication";
 import { log as logActivity } from "../../utils/activityLog";
-import { captureRequest, buildResponseSnapshot } from "../../utils/capture";
+import {
+  captureRequest,
+  // buildResponseSnapshot, // response-payload capture disabled for now
+} from "../../utils/capture";
 
 const ACTION_BY_METHOD = {
   GET: "read",
@@ -25,23 +28,17 @@ export const tokenRoute = (fastify, opts, done) => {
   // audit log too — category "token" — so token traffic is visible beside
   // API/MCP calls. Anything secret in these calls (authorization codes,
   // refresh tokens, state) is redacted by captureRequest before storage.
-  fastify.addHook("onSend", (req, reply, payload, done) => {
-    try {
-      if (
-        payload !== undefined &&
-        payload !== null &&
-        typeof payload !== "function"
-      ) {
-        req.activityResponsePayload = buildResponseSnapshot(
-          reply.statusCode,
-          payload,
-        );
-      }
-    } catch {
-      req.activityResponsePayload = null;
-    }
-    done();
-  });
+  // Response-payload capture disabled for now (kept in git history).
+  // fastify.addHook("onSend", (req, reply, payload, done) => {
+  //   try {
+  //     if (payload !== undefined && payload !== null && typeof payload !== "function") {
+  //       req.activityResponsePayload = buildResponseSnapshot(reply.statusCode, payload);
+  //     }
+  //   } catch {
+  //     req.activityResponsePayload = null;
+  //   }
+  //   done();
+  // });
   fastify.addHook("onResponse", (req, reply, done) => {
     const resource =
       req.routeOptions?.url ||
@@ -60,7 +57,7 @@ export const tokenRoute = (fastify, opts, done) => {
       ip: req.ip || null,
       category: "token",
       requestPayload: captureRequest(req),
-      responsePayload: req.activityResponsePayload || null,
+      // responsePayload: req.activityResponsePayload || null, // disabled for now
     });
     done();
   });

@@ -13,7 +13,7 @@ import { ValidateToken } from "../middlewares/authentication";
 import { log as logActivity } from "../utils/activityLog";
 import {
   captureRequest,
-  buildResponseSnapshot,
+  // buildResponseSnapshot, // response-payload capture disabled for now
   categoryForUrl,
 } from "../utils/capture";
 
@@ -103,25 +103,17 @@ export const PrivateRouters = (fastify, opts, done) => {
     ValidateToken(req, reply, fastify),
   );
 
-  // Capture the response that went on the wire (bounded + sanitised — see
-  // src/utils/capture.js) so the console can show what the caller got back.
-  fastify.addHook("onSend", (req, reply, payload, done) => {
-    try {
-      if (
-        payload !== undefined &&
-        payload !== null &&
-        typeof payload !== "function"
-      ) {
-        req.activityResponsePayload = buildResponseSnapshot(
-          reply.statusCode,
-          payload,
-        );
-      }
-    } catch {
-      req.activityResponsePayload = null;
-    }
-    done();
-  });
+  // Response-payload capture is disabled for now (kept in git history).
+  // fastify.addHook("onSend", (req, reply, payload, done) => {
+  //   try {
+  //     if (payload !== undefined && payload !== null && typeof payload !== "function") {
+  //       req.activityResponsePayload = buildResponseSnapshot(reply.statusCode, payload);
+  //     }
+  //   } catch {
+  //     req.activityResponsePayload = null;
+  //   }
+  //   done();
+  // });
 
   // Activity log — one row per request, written after the response is
   // already on the wire so logging never adds latency to the caller. Covers
@@ -146,7 +138,7 @@ export const PrivateRouters = (fastify, opts, done) => {
       ip: access?.ip || req.ip || null,
       category: categoryForUrl(resource),
       requestPayload: captureRequest(req),
-      responsePayload: req.activityResponsePayload || null,
+      // responsePayload: req.activityResponsePayload || null, // disabled for now
     });
 
     done();
