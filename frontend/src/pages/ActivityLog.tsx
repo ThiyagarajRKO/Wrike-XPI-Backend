@@ -10,6 +10,7 @@ import {
 } from "../lib/activityLogApi";
 import type { AdminEnvironment } from "../lib/adminApi";
 import { toast } from "../lib/notify";
+import AdminSelect from "../components/AdminSelect";
 import "./ActivityLog.css";
 
 const PAGE_SIZE = 25;
@@ -188,20 +189,17 @@ export default function ActivityLog({ environments, active }: Props) {
         </div>
 
         <div className="al-env-select">
-          <i className="fa-solid fa-layer-group" aria-hidden="true" />
-          <select
+          <AdminSelect
+            icon="fa-layer-group"
+            ariaLabel="Filter by environment"
             value={envFilter}
-            onChange={(e) => setEnvFilter(e.target.value)}
-            aria-label="Filter by environment"
-          >
-            <option value="">All environments</option>
-            {environments.map((env) => (
-              <option key={env.id} value={env.id}>
-                {env.environment_name}
-              </option>
-            ))}
-          </select>
-          <i className="fa-solid fa-chevron-down al-select-caret" aria-hidden="true" />
+            onChange={setEnvFilter}
+            placeholder="All environments"
+            options={[
+              { value: "", label: "All environments" },
+              ...environments.map((env) => ({ value: env.id, label: env.environment_name })),
+            ]}
+          />
         </div>
 
         <div className="al-chipgroup" role="group" aria-label="Filter by surface">

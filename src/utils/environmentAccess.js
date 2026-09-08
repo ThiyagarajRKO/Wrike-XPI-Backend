@@ -33,11 +33,6 @@ require("dotenv").config();
 
 /* ── Configuration ─────────────────────────────────────────────────────── */
 
-// A missing ENVIRONMENT_ACCESS_ENABLED means enforced. Only an explicit
-// "false" turns the gate into audit-only logging — the safe default is the
-// strict one, same convention as every other feature flag in this app.
-const ENFORCED = process.env.ENVIRONMENT_ACCESS_ENABLED !== "false";
-
 const seconds = (name, fallback) => {
   const parsed = parseInt(process.env[name], 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -340,5 +335,3 @@ export const evaluateAccess = async ({ envId, wrikeToken, email: knownEmail, ip 
  * came from the proxy, which makes IP rules either useless or wrong.
  */
 export const clientIp = (req) => req?.ip || req?.raw?.socket?.remoteAddress || null;
-
-export const isEnforced = () => ENFORCED;

@@ -128,39 +128,8 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   BANNERS / EXPLAINER
+   EXPLAINER
    ═══════════════════════════════════════════════════════════ */
-
-.ea-audit-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 11px;
-  padding: 13px 16px;
-  margin-bottom: 14px;
-  border-radius: var(--radius-md);
-  background: var(--warning-soft);
-  border: 1px solid rgba(245, 158, 11, 0.35);
-}
-
-.ea-audit-banner i {
-  color: var(--warning);
-  font-size: 14px;
-  margin-top: 2px;
-  flex-shrink: 0;
-}
-
-.ea-audit-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.ea-audit-desc {
-  font-size: 12.5px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin-top: 2px;
-}
 
 /* States what "match-any" means, once, plainly — the feature's entire logic
    in one sentence rather than left to be inferred from the table. */
@@ -549,6 +518,47 @@
 .ea-type-picker {
   display: flex;
   gap: 8px;
+}
+
+.ea-value-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ea-use-my-ip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: var(--radius-sm);
+  transition: background-color 0.12s ease;
+}
+
+.ea-use-my-ip i {
+  font-size: 10.5px;
+}
+
+.ea-use-my-ip:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.ea-use-my-ip:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.ea-use-my-ip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .ea-type-option {

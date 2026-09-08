@@ -1,0 +1,158 @@
+/* Admin-shell dropdown — tokens-based sibling of SearchableSelect.css
+   (that one is styled for the dark glass login hero, this one for the
+   light card/border/accent system every other admin control uses). */
+
+.adsel {
+  position: relative;
+}
+
+.adsel-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.adsel-trigger:hover {
+  border-color: var(--accent);
+}
+
+.adsel-trigger:focus-visible,
+.adsel-trigger[aria-expanded="true"] {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.adsel-icon {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.adsel-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adsel-placeholder {
+  color: var(--text-muted);
+}
+
+.adsel-caret {
+  font-size: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.adsel-caret.open {
+  transform: rotate(180deg);
+}
+
+.adsel-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.adsel-search {
+  flex-shrink: 0;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.adsel-search::placeholder {
+  color: var(--text-muted);
+}
+
+.adsel-search:focus {
+  outline: none;
+}
+
+.adsel-options {
+  overflow-y: auto;
+  padding: 5px;
+}
+
+.adsel-empty {
+  padding: 14px 10px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .adsel-panel {
+    animation: adselIn 0.12s ease-out;
+  }
+
+  @keyframes adselIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+.adsel-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.adsel-option i {
+  font-size: 10px;
+  color: var(--accent);
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.adsel-option.highlighted {
+  background: var(--bg-surface);
+}
+
+.adsel-option.selected {
+  color: var(--accent);
+  font-weight: 600;
+}

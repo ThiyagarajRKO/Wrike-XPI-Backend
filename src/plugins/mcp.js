@@ -6,11 +6,7 @@ const {
 } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { createMcpServer } = require("../mcp/index.js");
 const { resolveAuth } = require("../mcp/tools/auth.js");
-const {
-  evaluateAccess,
-  clientIp,
-  isEnforced,
-} = require("../utils/environmentAccess.js");
+const { evaluateAccess, clientIp } = require("../utils/environmentAccess.js");
 const { log: logActivity } = require("../utils/activityLog.js");
 
 /**
@@ -102,7 +98,7 @@ module.exports = async function (fastify, opts) {
       });
     }
 
-    if (!access.allowed && isEnforced()) {
+    if (!access.allowed) {
       recordActivity({
         envId: auth.envId,
         environmentName: auth.environmentName,

@@ -23,10 +23,6 @@ export interface AccessSummaryRow {
   rules_enabled: number;
 }
 
-export interface AccessConfig {
-  enforced: boolean;
-}
-
 export type CheckStatus = "pass" | "fail";
 
 export interface CheckStep {
@@ -69,7 +65,10 @@ const jsonBody = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-export const getAccessConfig = () => request<AccessConfig>("/config");
+/** The IP the server sees this admin's request from — the exact value the
+    real IP allow-list gate reads, so "Use my IP" always fills in something
+    that would actually match if saved as-is. */
+export const getMyIp = () => request<{ ip: string | null }>("/my-ip");
 
 export const getAccessSummary = () =>
   request<Record<string, AccessSummaryRow>>("/summary").then((rows) => rows || {});

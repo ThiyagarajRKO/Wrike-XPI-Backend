@@ -1,6 +1,10 @@
 import { verifyAdminJWT } from "../../../middlewares/adminAuth";
 import { EnvironmentAccess } from "../../../controllers";
-import { evaluateAccess, invalidateEnvironment, isEnforced } from "../../../utils/environmentAccess";
+import {
+  clientIp,
+  evaluateAccess,
+  invalidateEnvironment,
+} from "../../../utils/environmentAccess";
 
 import {
   CreateRuleSchema,
@@ -31,9 +35,12 @@ export const adminEnvironmentAccessRoute = (fastify, opts, done) => {
       message: err?.message || err || "Request failed",
     });
 
-  fastify.get("/config", guard, async (req, reply) =>
-    ok(reply, { enforced: isEnforced() }),
-  );
+  // GET /environment-access/my-ip — the "Use my IP" button in the Add-entry
+  // modal. Deliberately the exact same clientIp() the request-path gate
+  // itself reads, so what this returns is guaranteed to be what an IP rule
+  // built from it would actually match — not a separate "what's my IP"
+  // lookup that could disagree with the real gate.
+  fastify.get("/my-ip", guard, async (req, reply) => ok(reply, { ip: clientIp(req) }));
 
   fastify.get("/summary", guard, async (req, reply) => {
     try {

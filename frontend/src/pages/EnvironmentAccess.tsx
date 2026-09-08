@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   checkAccess,
   createRule,
   deleteRule,
-  getAccessConfig,
+  getMyIp,
   inferRuleType,
   listRules,
   ruleTypeLabel,
   updateRule,
-  type AccessConfig,
   type AccessRule,
   type CheckResult,
   type RuleType,
@@ -109,7 +108,6 @@ export default function EnvironmentAccess({
       setSwitchBusy(null);
     }
   };
-  const [config, setConfig] = useState<AccessConfig | null>(null);
   const [tab, setTab] = useState<TabId>("allowlist");
 
   const [rules, setRules] = useState<AccessRule[]>([]);
@@ -122,13 +120,28 @@ export default function EnvironmentAccess({
   const [addLabel, setAddLabel] = useState("");
   const [addTypeTouched, setAddTypeTouched] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fillingMyIp, setFillingMyIp] = useState(false);
+
+  const useMyIp = async () => {
+    setFillingMyIp(true);
+    try {
+      const { ip } = await getMyIp();
+      if (!ip) {
+        toast("Could not detect your IP", "error");
+        return;
+      }
+      setAddValue(ip);
+    } catch (err: any) {
+      toast(err?.message || "Could not detect your IP", "error");
+    } finally {
+      setFillingMyIp(false);
+    }
+  };
 
   const [checkEmail, setCheckEmail] = useState("");
   const [checkIp, setCheckIp] = useState("");
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
   const [checkBusy, setCheckBusy] = useState(false);
-
-  const configLoaded = useRef(false);
 
   const load = useCallback(async () => {
     if (!envId) return;
@@ -152,12 +165,6 @@ export default function EnvironmentAccess({
       setCheckIp("");
     }
   }, [open, envId, load]);
-
-  useEffect(() => {
-    if (!open || configLoaded.current) return;
-    configLoaded.current = true;
-    getAccessConfig().then(setConfig).catch(() => {});
-  }, [open, configLoaded]);
 
   // Esc closes, matching every other dismissible surface in the console.
   useEffect(() => {
@@ -299,19 +306,6 @@ export default function EnvironmentAccess({
         </header>
 
         <div className="ea-body">
-          {config && !config.enforced && (
-            <div className="ea-audit-banner" role="status">
-              <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
-              <div>
-                <div className="ea-audit-title">Enforcement is currently off</div>
-                <div className="ea-audit-desc">
-                  Rules below are saved and evaluated, but nobody is actually blocked yet. Set{" "}
-                  <code>ENVIRONMENT_ACCESS_ENABLED=true</code> to start enforcing.
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="ea-explainer">
             <i className="fa-solid fa-circle-info" aria-hidden="true" />
             <span>
@@ -324,7 +318,7 @@ export default function EnvironmentAccess({
             <div className="ea-switch-card">
               <div className="ea-switch-info">
                 <div className="ea-switch-title">Email / domain / IP allow list</div>
-                <div className="ea-switch-desc">The gate below, in full.</div>
+                <div className="ea-switch-desc">Blocks unlisted callers.</div>
               </div>
               <label
                 className="toggle-wrap"
@@ -350,7 +344,7 @@ export default function EnvironmentAccess({
             <div className="ea-switch-card">
               <div className="ea-switch-info">
                 <div className="ea-switch-title">Xtend API custom field</div>
-                <div className="ea-switch-desc">Saved now, not enforced yet.</div>
+                <div className="ea-switch-desc">Checks a Wrike profile field.</div>
               </div>
               <label className="toggle-wrap" title="Reserved for the upcoming custom-field check">
                 <input
@@ -643,9 +637,25 @@ export default function EnvironmentAccess({
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label" htmlFor="ea-add-value">
-                    {ruleTypeLabel(addType)}
-                  </label>
+                  <div className="ea-value-label-row">
+                    <label className="form-label" htmlFor="ea-add-value">
+                      {ruleTypeLabel(addType)}
+                    </label>
+                    {addType === "ip" && (
+                      <button
+                        type="button"
+                        className="ea-use-my-ip"
+                        disabled={fillingMyIp}
+                        onClick={useMyIp}
+                      >
+                        <i
+                          className={`fa-solid ${fillingMyIp ? "fa-spinner fa-spin" : "fa-location-crosshairs"}`}
+                          aria-hidden="true"
+                        />
+                        Use my IP
+                      </button>
+                    )}
+                  </div>
                   <input
                     id="ea-add-value"
                     className="form-control"
