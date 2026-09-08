@@ -94,13 +94,20 @@ export const adminEnvironmentAccessRoute = (fastify, opts, done) => {
   // and/or IP standing in for a live token.
   fastify.post("/check", { ...CheckSchema, ...guard }, async (req, reply) => {
     try {
-      const { env_id, email, ip } = req.body;
+      const { env_id, email, ip, surface } = req.body;
 
       if (!email && !ip) {
         throw { statusCode: 400, message: "Provide an email, an IP, or both to check." };
       }
 
-      const result = await evaluateAccess({ envId: env_id, email, ip });
+      const result = await evaluateAccess({
+        envId: env_id,
+        email,
+        ip,
+        // Defaults to the REST API when the caller does not say, matching
+        // evaluateAccess itself.
+        surface: surface || undefined,
+      });
       return ok(reply, result);
     } catch (err) {
       return fail(reply, err);

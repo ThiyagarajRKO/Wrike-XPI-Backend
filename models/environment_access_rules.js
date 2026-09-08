@@ -53,6 +53,12 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         comment: "Human note shown in the admin console",
       },
+      applies_to: {
+        type: DataTypes.ENUM("api", "mcp", "both"),
+        allowNull: false,
+        defaultValue: "both",
+        comment: "Surface this entry grants: api (REST only), mcp, or both",
+      },
       is_enabled: {
         type: DataTypes.BOOLEAN,
         allowNull: false,

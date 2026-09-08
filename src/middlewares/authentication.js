@@ -2,7 +2,7 @@ import { Tokens } from "../controllers";
 import { getWrikeTokens } from "../utils/wrike";
 import * as crypto from "../utils/crypto";
 import jwt from "jsonwebtoken";
-import { evaluateAccess, clientIp } from "../utils/environmentAccess";
+import { evaluateAccess, clientIp, SURFACE } from "../utils/environmentAccess";
 
 // Verify Basic Auth credentials and return unwrapped DEK
 const verifyBasicAuth = async (credentials) => {
@@ -163,6 +163,8 @@ export const ValidateToken = async (req, reply, fastify) => {
       envId: token.env_id,
       wrikeToken: accessToken,
       ip: clientIp(req),
+      // This is the REST path, so entries scoped to MCP only do not apply.
+      surface: SURFACE.API,
     });
 
     // Set before the possible return below, so the activity-log onResponse

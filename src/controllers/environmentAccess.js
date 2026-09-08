@@ -19,14 +19,37 @@ const RULE_ATTRS = [
   "rule_type",
   "value",
   "label",
+  "applies_to",
   "is_enabled",
   "is_active",
   "created_at",
   "updated_at",
 ];
 
+/** Surfaces an allow-list entry can govern. */
+export const APPLIES_TO = ["api", "mcp", "both"];
+
 const requireEnv = (envId) => {
   if (!envId) throw { statusCode: 400, message: "Environment must not be empty!" };
+};
+
+/**
+ * Normalise and validate the surface an entry applies to. Undefined means
+ * "unchanged" on an update and falls back to the column default on a create;
+ * anything else must be one of the three known surfaces. Deliberately strict:
+ * silently coercing an unrecognised value to "both" would widen access.
+ */
+const normaliseAppliesTo = (raw) => {
+  if (raw === undefined || raw === null || raw === "") return undefined;
+
+  const value = String(raw).trim().toLowerCase();
+  if (!APPLIES_TO.includes(value)) {
+    throw {
+      statusCode: 400,
+      message: `"${raw}" is not a valid surface. Use one of: ${APPLIES_TO.join(", ")}.`,
+    };
+  }
+  return value;
 };
 
 /** Reject a value that doesn't parse as what its rule_type claims. */
@@ -120,6 +143,7 @@ export const CreateRule = async (profileId, data) => {
       rule_type: data.rule_type,
       value,
       label: data.label || null,
+      applies_to: normaliseAppliesTo(data.applies_to) || "both",
       is_enabled: data.is_enabled !== false,
     },
     { profile_id: profileId },
@@ -140,11 +164,16 @@ export const UpdateRule = async (profileId, id, data) => {
     validateRuleValue(rule.rule_type, data.value);
   }
 
+  const appliesTo = normaliseAppliesTo(data?.applies_to);
+
   // Captured before the update: if a future caller is ever allowed to move a
   // rule between environments, BOTH sides need their cache dropped.
   const previousEnvId = rule.env_id;
 
-  await rule.update(data, { profile_id: profileId });
+  await rule.update(
+    appliesTo === undefined ? data : { ...data, applies_to: appliesTo },
+    { profile_id: profileId },
+  );
 
   await invalidateEnvironment(previousEnvId);
   if (rule.env_id !== previousEnvId) await invalidateEnvironment(rule.env_id);

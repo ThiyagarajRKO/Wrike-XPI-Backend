@@ -2,6 +2,13 @@ const EMAIL_PATTERN = "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$";
 
 const RULE_TYPES = ["email", "domain", "ip"];
 
+// Which surface an entry governs. "both" is the default, so an entry added
+// without naming a surface behaves exactly as entries did before this existed.
+const APPLIES_TO = ["api", "mcp", "both"];
+
+// The surface the check simulator should evaluate against.
+const SURFACES = ["api", "mcp"];
+
 export const CreateRuleSchema = {
   schema: {
     body: {
@@ -15,6 +22,7 @@ export const CreateRuleSchema = {
         // validates against rule_type via environmentAccess.validateRuleValue.
         value: { type: "string", minLength: 1, maxLength: 255 },
         label: { type: "string", maxLength: 255, nullable: true },
+        applies_to: { type: "string", enum: APPLIES_TO },
         is_enabled: { type: "boolean" },
       },
     },
@@ -33,6 +41,7 @@ export const UpdateRuleSchema = {
       properties: {
         value: { type: "string", minLength: 1, maxLength: 255 },
         label: { type: "string", maxLength: 255, nullable: true },
+        applies_to: { type: "string", enum: APPLIES_TO },
         is_enabled: { type: "boolean" },
         is_active: { type: "boolean" },
       },
@@ -69,6 +78,7 @@ export const CheckSchema = {
         env_id: { type: "string", format: "uuid" },
         email: { type: "string", pattern: EMAIL_PATTERN, nullable: true },
         ip: { type: "string", maxLength: 45, nullable: true },
+        surface: { type: "string", enum: SURFACES },
       },
     },
   },

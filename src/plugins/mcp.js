@@ -6,7 +6,11 @@ const {
 } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { createMcpServer } = require("../mcp/index.js");
 const { resolveAuth } = require("../mcp/tools/auth.js");
-const { evaluateAccess, clientIp } = require("../utils/environmentAccess.js");
+const {
+  evaluateAccess,
+  clientIp,
+  SURFACE,
+} = require("../utils/environmentAccess.js");
 const { log: logActivity } = require("../utils/activityLog.js");
 
 /**
@@ -82,6 +86,9 @@ module.exports = async function (fastify, opts) {
         envId: auth.envId,
         wrikeToken: auth.wrikeToken,
         ip: clientIp(req),
+        // This is the MCP path, so entries scoped to the REST API only do
+        // not apply.
+        surface: SURFACE.MCP,
       });
     } catch (err) {
       recordActivity({

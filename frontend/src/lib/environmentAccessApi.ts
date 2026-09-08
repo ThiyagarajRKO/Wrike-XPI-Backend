@@ -5,12 +5,19 @@ import { adminFetch } from "./authApi";
 
 export type RuleType = "email" | "domain" | "ip";
 
+/** Which surface an entry grants access to. */
+export type AppliesTo = "api" | "mcp" | "both";
+
+/** The surface the check simulator evaluates against. */
+export type Surface = "api" | "mcp";
+
 export interface AccessRule {
   id: string;
   env_id: string;
   rule_type: RuleType;
   value: string;
   label: string | null;
+  applies_to: AppliesTo;
   is_enabled: boolean;
   is_active: boolean;
   created_at?: string;
@@ -36,7 +43,13 @@ export interface CheckResult {
   message: string;
   email: string | null;
   ip: string | null;
-  matchedRule: { rule_type: RuleType; value: string; label: string | null } | null;
+  surface: Surface;
+  matchedRule: {
+    rule_type: RuleType;
+    value: string;
+    label: string | null;
+    applies_to: AppliesTo;
+  } | null;
   checks: CheckStep[];
 }
 
@@ -83,24 +96,36 @@ export const createRule = (payload: {
   rule_type: RuleType;
   value: string;
   label?: string | null;
+  applies_to?: AppliesTo;
   is_enabled?: boolean;
 }) => request<AccessRule>("/rules", jsonBody("POST", payload));
 
 export const updateRule = (
   id: string,
-  payload: { value?: string; label?: string | null; is_enabled?: boolean },
+  payload: {
+    value?: string;
+    label?: string | null;
+    applies_to?: AppliesTo;
+    is_enabled?: boolean;
+  },
 ) => request<AccessRule>(`/rules/${id}`, jsonBody("PUT", payload));
 
 export const deleteRule = (id: string) =>
   request<null>(`/rules/${id}`, { method: "DELETE" });
 
-export const checkAccess = (env_id: string, email: string, ip: string) =>
+export const checkAccess = (
+  env_id: string,
+  email: string,
+  ip: string,
+  surface: Surface = "api",
+) =>
   request<CheckResult>(
     "/check",
     jsonBody("POST", {
       env_id,
       email: email || undefined,
       ip: ip || undefined,
+      surface,
     }),
   );
 
@@ -113,6 +138,20 @@ const RULE_TYPE_LABEL: Record<RuleType, string> = {
 };
 
 export const ruleTypeLabel = (type: RuleType) => RULE_TYPE_LABEL[type];
+
+const APPLIES_TO_LABEL: Record<AppliesTo, string> = {
+  api: "API",
+  mcp: "MCP",
+  both: "API + MCP",
+};
+
+export const appliesToLabel = (scope: AppliesTo) => APPLIES_TO_LABEL[scope] || scope;
+
+export const APPLIES_TO_OPTIONS: { value: AppliesTo; label: string; hint: string }[] = [
+  { value: "both", label: "API + MCP", hint: "Works everywhere" },
+  { value: "api", label: "API only", hint: "REST calls only" },
+  { value: "mcp", label: "MCP only", hint: "MCP agents only" },
+];
 
 /**
  * Guess the rule type from raw input as the admin types, so they don't have

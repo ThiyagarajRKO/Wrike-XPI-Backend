@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  APPLIES_TO_OPTIONS,
+  appliesToLabel,
   checkAccess,
   createRule,
   deleteRule,
@@ -9,8 +11,10 @@ import {
   ruleTypeLabel,
   updateRule,
   type AccessRule,
+  type AppliesTo,
   type CheckResult,
   type RuleType,
+  type Surface,
 } from "../lib/environmentAccessApi";
 import { toggleEnvironmentStatus, type AdminEnvironment } from "../lib/adminApi";
 import { confirmDanger, escHtml, toast } from "../lib/notify";
@@ -29,6 +33,56 @@ const TYPE_PLACEHOLDER: Record<RuleType, string> = {
   domain: "company.com",
   ip: "203.0.113.4 or 203.0.113.0/24",
 };
+
+/**
+ * Picks which surface an entry grants: the REST API, MCP, or both.
+ *
+ * Used inline in the table (so an entry can be retargeted in one click,
+ * without opening anything) and in the add form. The three options are always
+ * visible rather than hidden behind a dropdown: with only three, showing them
+ * costs no more room than a select and makes the current scope readable at a
+ * glance down the column.
+ */
+function SurfacePicker({
+  value,
+  onChange,
+  disabled = false,
+  size = "md",
+  idPrefix,
+}: {
+  value: AppliesTo;
+  onChange: (next: AppliesTo) => void;
+  disabled?: boolean;
+  size?: "sm" | "md";
+  idPrefix: string;
+}) {
+  return (
+    <div
+      className={`ea-surface${size === "sm" ? " ea-surface-sm" : ""}`}
+      role="radiogroup"
+      aria-label="Applies to"
+    >
+      {APPLIES_TO_OPTIONS.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            id={`${idPrefix}-${option.value}`}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={`ea-surface-opt${active ? " active" : ""}`}
+            disabled={disabled}
+            title={option.hint}
+            onClick={() => !active && onChange(option.value)}
+          >
+            {size === "sm" ? appliesToLabel(option.value) : option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 interface Props {
   envId: string | null;
@@ -118,6 +172,7 @@ export default function EnvironmentAccess({
   const [addType, setAddType] = useState<RuleType>("email");
   const [addValue, setAddValue] = useState("");
   const [addLabel, setAddLabel] = useState("");
+  const [addAppliesTo, setAddAppliesTo] = useState<AppliesTo>("both");
   const [addTypeTouched, setAddTypeTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [fillingMyIp, setFillingMyIp] = useState(false);
@@ -140,6 +195,9 @@ export default function EnvironmentAccess({
 
   const [checkEmail, setCheckEmail] = useState("");
   const [checkIp, setCheckIp] = useState("");
+  // Which surface the simulator pretends the call arrived on. An entry scoped
+  // to the other surface will correctly fail here, which is the point.
+  const [checkSurface, setCheckSurface] = useState<Surface>("api");
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
   const [checkBusy, setCheckBusy] = useState(false);
 
@@ -230,8 +288,24 @@ export default function EnvironmentAccess({
     setAddType("email");
     setAddValue("");
     setAddLabel("");
+    setAddAppliesTo("both");
     setAddTypeTouched(false);
     setAddOpen(true);
+  };
+
+  /* Retarget one entry between API, MCP and both, straight from the table.
+     Optimistic, and rolled back if the write fails, matching how the
+     enable/disable switch on the same row behaves. */
+  const changeAppliesTo = async (rule: AccessRule, next: AppliesTo) => {
+    const previous = rule.applies_to;
+    setRules((rows) => rows.map((r) => (r.id === rule.id ? { ...r, applies_to: next } : r)));
+    try {
+      await updateRule(rule.id, { applies_to: next });
+      toast(`${rule.value} now applies to ${appliesToLabel(next)}`, "success");
+    } catch (err: any) {
+      setRules((rows) => rows.map((r) => (r.id === rule.id ? { ...r, applies_to: previous } : r)));
+      toast(err?.message || "Could not change where this entry applies", "error");
+    }
   };
 
   const onAddValueChange = (value: string) => {
@@ -254,6 +328,7 @@ export default function EnvironmentAccess({
         rule_type: addType,
         value,
         label: addLabel.trim() || null,
+        applies_to: addAppliesTo,
       });
       toast(`Added to the allow list`, "success");
       setAddOpen(false);
@@ -273,7 +348,9 @@ export default function EnvironmentAccess({
     }
     setCheckBusy(true);
     try {
-      setCheckResult(await checkAccess(envId, checkEmail.trim(), checkIp.trim()));
+      setCheckResult(
+        await checkAccess(envId, checkEmail.trim(), checkIp.trim(), checkSurface),
+      );
     } catch (err: any) {
       toast(err?.message || "Could not run the check", "error");
       setCheckResult(null);
@@ -411,6 +488,7 @@ export default function EnvironmentAccess({
                       <tr>
                         <th scope="col">Value</th>
                         <th scope="col">Type</th>
+                        <th scope="col">Applies to</th>
                         <th scope="col">Switch</th>
                         <th scope="col" className="ea-col-actions">
                           Actions
@@ -421,7 +499,7 @@ export default function EnvironmentAccess({
                       {loading &&
                         Array.from({ length: 4 }).map((_, i) => (
                           <tr className="ea-skeleton-row" key={i}>
-                            <td colSpan={4}>
+                            <td colSpan={5}>
                               <div className="ea-skeleton" />
                             </td>
                           </tr>
@@ -449,6 +527,15 @@ export default function EnvironmentAccess({
                             </td>
                             <td>
                               <span className="ea-type-badge">{ruleTypeLabel(rule.rule_type)}</span>
+                            </td>
+                            <td>
+                              <SurfacePicker
+                                size="sm"
+                                idPrefix={`surface-${rule.id}`}
+                                value={rule.applies_to}
+                                onChange={(next) => changeAppliesTo(rule, next)}
+                                disabled={!rule.is_enabled}
+                              />
                             </td>
                             <td>
                               <label
@@ -549,9 +636,34 @@ export default function EnvironmentAccess({
                     />
                   </div>
                 </div>
+                <div className="form-group">
+                  <label className="form-label">Calling as</label>
+                  <div className="ea-surface" role="radiogroup" aria-label="Calling as">
+                    {(["api", "mcp"] as Surface[]).map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        role="radio"
+                        aria-checked={checkSurface === s}
+                        className={`ea-surface-opt${checkSurface === s ? " active" : ""}`}
+                        onClick={() => {
+                          setCheckSurface(s);
+                          setCheckResult(null);
+                        }}
+                      >
+                        <i
+                          className={`fa-solid ${s === "api" ? "fa-code" : "fa-robot"}`}
+                          aria-hidden="true"
+                        />
+                        &nbsp;{s === "api" ? "REST API" : "MCP"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <p className="ea-check-hint">
                   Fill in either or both. The check runs the exact same match-any rule real
-                  requests do.
+                  requests do, for the surface you picked. An entry scoped to the other
+                  surface will not count.
                 </p>
                 <button
                   type="button"
@@ -580,7 +692,8 @@ export default function EnvironmentAccess({
                   </div>
                   <div className="ea-verdict-body">
                     <div className="ea-verdict-title">
-                      {checkResult.allowed ? "Would be let through" : "Would be refused"}
+                      {checkResult.allowed ? "Would be let through" : "Would be refused"} on{" "}
+                      {checkSurface === "api" ? "the REST API" : "MCP"}
                     </div>
                     <div className="ea-verdict-detail">{checkResult.checks[0]?.detail}</div>
                     {checkResult.matchedRule && (
@@ -591,7 +704,10 @@ export default function EnvironmentAccess({
                           {checkResult.matchedRule.rule_type === "domain"
                             ? `@${checkResult.matchedRule.value}`
                             : checkResult.matchedRule.value}
-                        </strong>
+                        </strong>{" "}
+                        <span className="ea-verdict-scope">
+                          ({appliesToLabel(checkResult.matchedRule.applies_to)})
+                        </span>
                       </div>
                     )}
                   </div>
@@ -664,6 +780,24 @@ export default function EnvironmentAccess({
                     value={addValue}
                     onChange={(e) => onAddValueChange(e.target.value)}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" id="ea-add-applies-label">
+                    Applies to
+                  </label>
+                  <SurfacePicker
+                    idPrefix="ea-add-applies"
+                    value={addAppliesTo}
+                    onChange={setAddAppliesTo}
+                  />
+                  <div className="ea-field-hint">
+                    {addAppliesTo === "both"
+                      ? "This entry grants access to both the REST API and MCP."
+                      : addAppliesTo === "api"
+                        ? "REST API calls only. MCP agents using this identity are denied."
+                        : "MCP agents only. REST API calls using this identity are denied."}
+                  </div>
                 </div>
 
                 <div className="form-group">

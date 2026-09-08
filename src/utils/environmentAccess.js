@@ -49,11 +49,27 @@ export { invalidateEnvironment };
 
 /* ── Loaders ───────────────────────────────────────────────────────────── */
 
+/**
+ * Every enabled entry for one environment, across both surfaces.
+ *
+ * The API/MCP filter is applied at MATCH time, not here, so one cache entry
+ * serves both surfaces instead of splitting the cache in two and doubling the
+ * cold-start queries.
+ */
 const loadRules = async (envId) => {
   const rules = await EnvironmentAccess.GetRulesByEnv(envId);
   return rules
     .filter((r) => r.is_enabled)
-    .map((r) => ({ id: r.id, rule_type: r.rule_type, value: r.value, label: r.label }));
+    .map((r) => ({
+      id: r.id,
+      rule_type: r.rule_type,
+      value: r.value,
+      label: r.label,
+      // Rows written before applies_to existed read as null; treat that as
+      // the column default rather than as "matches nothing", which would
+      // lock out every caller the moment this deployed.
+      applies_to: r.applies_to || "both",
+    }));
 };
 
 /**
@@ -152,12 +168,33 @@ const ipMatches = (rule, ip) => {
   }
 };
 
-const matchRule = (rule, { email, ip }) => {
+/** The surfaces a request can arrive on. */
+export const SURFACE = { API: "api", MCP: "mcp" };
+
+/**
+ * True if this entry governs the surface the request arrived on. "both"
+ * covers everything; otherwise the entry has to name this surface exactly.
+ *
+ * An unrecognised surface matches nothing. That is the fail-closed choice: a
+ * new transport added later is denied until someone lists it deliberately,
+ * rather than inheriting every existing allow-list entry by accident.
+ */
+const appliesToSurface = (rule, surface) => {
+  const scope = rule.applies_to || "both";
+  if (scope === "both") return true;
+  return scope === surface;
+};
+
+const matchRule = (rule, { email, ip, surface }) => {
+  if (!appliesToSurface(rule, surface)) return false;
   if (rule.rule_type === "email") return !!email && email === rule.value;
   if (rule.rule_type === "domain") return !!email && domainOf(email) === rule.value;
   if (rule.rule_type === "ip") return ipMatches(rule, ip);
   return false;
 };
+
+const SURFACE_LABEL = { api: "REST API", mcp: "MCP" };
+const surfaceLabel = (surface) => SURFACE_LABEL[surface] || surface;
 
 /* ── The evaluation ────────────────────────────────────────────────────── */
 
@@ -176,9 +213,19 @@ const gate = (status, detail) => ({ status, detail });
  *                                      have it via `email`)
  * @param {string} [input.email]     Pre-resolved email (admin check tool)
  * @param {string} [input.ip]        Caller's request IP
+ * @param {string} [input.surface]   Which surface the request arrived on,
+ *                                    "api" or "mcp". Entries scoped to the
+ *                                    other surface are skipped. Defaults to
+ *                                    "api".
  * @returns {Promise<object>} decision
  */
-export const evaluateAccess = async ({ envId, wrikeToken, email: knownEmail, ip }) => {
+export const evaluateAccess = async ({
+  envId,
+  wrikeToken,
+  email: knownEmail,
+  ip,
+  surface = SURFACE.API,
+}) => {
   if (!envId) {
     return {
       allowed: false,
@@ -186,6 +233,7 @@ export const evaluateAccess = async ({ envId, wrikeToken, email: knownEmail, ip 
       message: "This token is not bound to an environment, so access rules cannot be applied.",
       email: knownEmail || null,
       ip: ip || null,
+      surface,
       matchedRule: null,
       checks: [gate("fail", "Token has no environment")],
     };
@@ -204,6 +252,7 @@ export const evaluateAccess = async ({ envId, wrikeToken, email: knownEmail, ip 
         message: "Could not verify who this token belongs to. Please retry.",
         email: null,
         ip: ip || null,
+        surface,
         matchedRule: null,
         checks: [gate("fail", err?.message || "Wrike profile lookup failed")],
       };
@@ -219,6 +268,7 @@ export const evaluateAccess = async ({ envId, wrikeToken, email: knownEmail, ip 
       message: "The allow-list check is switched off for this environment.",
       email: email || null,
       ip: ip || null,
+      surface,
       matchedRule: null,
       checks: [
         gate(
@@ -231,28 +281,51 @@ export const evaluateAccess = async ({ envId, wrikeToken, email: knownEmail, ip 
 
   const rules = await cached(rulesKey(envId), RULES_TTL, () => loadRules(envId));
 
-  const matched = rules.find((rule) => matchRule(rule, { email, ip }));
+  const inScope = rules.filter((rule) => appliesToSurface(rule, surface));
+  const matched = inScope.find((rule) => matchRule(rule, { email, ip, surface }));
 
   if (!matched) {
     const identityLine = email
       ? `${email} (domain @${domainOf(email)})`
       : "no identity resolved";
+
+    // Would this caller have been let in on the OTHER surface? If so the
+    // entry exists and is simply scoped elsewhere, which is a configuration
+    // mistake worth naming precisely instead of reporting a flat "no match"
+    // that sends the admin hunting for an entry that is already there.
+    const otherSurfaceMatch = rules.find(
+      (rule) => !appliesToSurface(rule, surface) && matchRule({ ...rule, applies_to: "both" }, { email, ip, surface }),
+    );
+
+    const scopeNote = otherSurfaceMatch
+      ? `. An entry for ${otherSurfaceMatch.value} exists but is scoped to ` +
+        `${surfaceLabel(otherSurfaceMatch.applies_to)} only`
+      : "";
+
     return {
       allowed: false,
-      code: "NOT_ALLOWED",
-      message: "This caller does not match any active allow-list entry for this environment.",
+      code: otherSurfaceMatch ? "NOT_ALLOWED_ON_SURFACE" : "NOT_ALLOWED",
+      message: otherSurfaceMatch
+        ? `This caller is not allowed on the ${surfaceLabel(surface)} for this environment.`
+        : "This caller does not match any active allow-list entry for this environment.",
       email: email || null,
       ip: ip || null,
+      surface,
       matchedRule: null,
       checks: [
         gate(
           "fail",
-          `Checked ${identityLine}${ip ? ` from ${ip}` : ""} against ${rules.length} active ` +
-            `entr${rules.length === 1 ? "y" : "ies"} — none matched`,
+          `Checked ${identityLine}${ip ? ` from ${ip}` : ""} against ${inScope.length} active ` +
+            `entr${inScope.length === 1 ? "y" : "ies"} for the ${surfaceLabel(surface)} — none matched${scopeNote}`,
         ),
       ],
     };
   }
+
+  const scopeSuffix =
+    matched.applies_to === "both"
+      ? " (API and MCP)"
+      : ` (${surfaceLabel(matched.applies_to)} only)`;
 
   return {
     allowed: true,
@@ -260,15 +333,16 @@ export const evaluateAccess = async ({ envId, wrikeToken, email: knownEmail, ip 
     message: "Authorized.",
     email: email || null,
     ip: ip || null,
+    surface,
     matchedRule: matched,
     checks: [
       gate(
         "pass",
-        matched.rule_type === "email"
+        (matched.rule_type === "email"
           ? `Matched email rule ${matched.value}`
           : matched.rule_type === "domain"
             ? `Matched domain rule @${matched.value}`
-            : `Matched IP rule ${matched.value}`,
+            : `Matched IP rule ${matched.value}`) + scopeSuffix,
       ),
     ],
   };
