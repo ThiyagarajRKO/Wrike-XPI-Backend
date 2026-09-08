@@ -13,7 +13,8 @@ import { toast } from "../lib/notify";
 import AdminSelect from "../components/AdminSelect";
 import "./ActivityLog.css";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const DEFAULT_PAGE_SIZE = 10;
 
 const CODE_LABEL: Record<string, string> = {
   ALLOWED: "Matched an allow-list entry",
@@ -43,6 +44,65 @@ function formatTime(iso: string): string {
   }
 }
 
+const CATEGORY_LABEL: Record<string, string> = {
+  campaign: "Campaign",
+  channel: "Channel",
+  task: "Task",
+  token: "Token service",
+  master: "Master",
+  amoeba: "Service",
+  mcp: "MCP",
+};
+
+const categoryLabel = (c: string | null) =>
+  (c && CATEGORY_LABEL[c]) || c || "—";
+
+/** Pretty-print a JSON value (objects → 2-space indented JSON). */
+const prettyJson = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+/** A request/response payload block inside the call-details modal. */
+function ActivityPayloadBlock({ title, payload }: { title: string; payload: unknown }) {
+  const [copied, setCopied] = useState(false);
+  const text = payload === null || payload === undefined ? "" : prettyJson(payload);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard unavailable — no-op */
+    }
+  };
+
+  return (
+    <div className="al-payload-block">
+      <div className="al-payload-head">
+        <span>{title}</span>
+        {text ? (
+          <button type="button" className="al-copy-btn" onClick={copy}>
+            <i className={`fa-solid ${copied ? "fa-check" : "fa-copy"}`} />{" "}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        ) : null}
+      </div>
+      {text ? (
+        <pre className="al-json">{text}</pre>
+      ) : (
+        <div className="al-no-payload">No {title.toLowerCase()} captured.</div>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   environments: AdminEnvironment[];
   active: boolean;
@@ -61,6 +121,8 @@ export default function ActivityLog({ environments, active }: Props) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [offset, setOffset] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [detailRow, setDetailRow] = useState<ActivityRow | null>(null);
 
   const [envFilter, setEnvFilter] = useState("");
   const [surfaceFilter, setSurfaceFilter] = useState<Surface | "">("");
@@ -80,7 +142,7 @@ export default function ActivityLog({ environments, active }: Props) {
             surface: surfaceFilter || undefined,
             allowed: resultFilter ? resultFilter === "allowed" : undefined,
             actor_email: emailFilter.trim() || undefined,
-            limit: PAGE_SIZE,
+            limit: pageSize,
             offset: nextOffset,
           }),
           getActivitySummary(envFilter || undefined),
@@ -96,7 +158,7 @@ export default function ActivityLog({ environments, active }: Props) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [envFilter, surfaceFilter, resultFilter, emailFilter],
+    [envFilter, surfaceFilter, resultFilter, emailFilter, pageSize],
   );
 
   useEffect(() => {
@@ -107,7 +169,7 @@ export default function ActivityLog({ environments, active }: Props) {
     }
     load(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, envFilter, surfaceFilter, resultFilter]);
+  }, [active, envFilter, surfaceFilter, resultFilter, pageSize]);
 
   // Email search is free text — debounce it instead of firing on every
   // keystroke.
@@ -121,13 +183,24 @@ export default function ActivityLog({ environments, active }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailFilter]);
 
-  const envName = useMemo(
-    () => Object.fromEntries(environments.map((e) => [e.id, e.environment_name])),
-    [environments],
-  );
+  const page = Math.floor(offset / pageSize) + 1;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const rangeFrom = total === 0 ? 0 : offset + 1;
+  const rangeTo = Math.min(offset + rows.length, total);
 
-  const page = Math.floor(offset / PAGE_SIZE) + 1;
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // Numbered pager with ellipses for large result sets — stays compact and
+  // readable even when the log spans many pages.
+  const pageItems = useMemo<Array<number | "…">>(() => {
+    if (pageCount <= 7) return Array.from({ length: pageCount }, (_, i) => i + 1);
+    const items: Array<number | "…"> = [1];
+    const left = Math.max(2, page - 2);
+    const right = Math.min(pageCount - 1, page + 2);
+    if (left > 2) items.push("…");
+    for (let p = left; p <= right; p++) items.push(p);
+    if (right < pageCount - 1) items.push("…");
+    items.push(pageCount);
+    return items;
+  }, [page, pageCount]);
 
   return (
     <>
@@ -250,15 +323,42 @@ export default function ActivityLog({ environments, active }: Props) {
       </div>
 
       <div className="ea-table-card">
+        {/* Rows-per-page + live count range, so admins can size the audit
+            log to their reading pace without losing count context. */}
+        <div className="al-toolbar">
+          <span className="al-range" aria-live="polite">
+            {loading
+              ? "Loading…"
+              : total === 0
+                ? "No calls"
+                : `Showing ${rangeFrom}–${rangeTo} of ${total}`}
+          </span>
+          <label className="al-pagesize">
+            Show
+            <select
+              className="al-pagesize-select"
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              aria-label="Rows per page"
+            >
+              {PAGE_SIZE_OPTIONS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            rows
+          </label>
+        </div>
         <div className="ea-scroll">
           <table className="ea-table al-table">
             <thead>
               <tr>
                 <th scope="col">Time</th>
                 <th scope="col">Caller</th>
-                <th scope="col">Environment</th>
                 <th scope="col">Surface</th>
                 <th scope="col">Called</th>
+                <th scope="col">IP</th>
                 <th scope="col">Result</th>
               </tr>
             </thead>
@@ -276,8 +376,17 @@ export default function ActivityLog({ environments, active }: Props) {
                 rows.map((row, i) => (
                   <tr
                     key={row.id}
-                    className={`al-row-in ${row.allowed ? "al-row-allowed" : "al-row-denied"}`}
+                    className={`al-row-in al-row-clickable ${row.allowed ? "al-row-allowed" : "al-row-denied"}`}
                     style={{ "--row-index": Math.min(i, 12) } as React.CSSProperties}
+                    title="View call details"
+                    tabIndex={0}
+                    onClick={() => setDetailRow(row)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setDetailRow(row);
+                      }
+                    }}
                   >
                     <td className="al-time">{formatTime(row.created_at)}</td>
                     <td className="al-caller">
@@ -289,11 +398,6 @@ export default function ActivityLog({ environments, active }: Props) {
                       )}
                     </td>
                     <td>
-                      {row.environment_name || envName[row.env_id || ""] || (
-                        <span style={{ color: "var(--text-muted)" }}>—</span>
-                      )}
-                    </td>
-                    <td>
                       <span className={`al-surface-badge al-surface-${row.surface}`}>
                         {row.surface === "mcp" ? "MCP" : "API"}
                       </span>
@@ -301,6 +405,13 @@ export default function ActivityLog({ environments, active }: Props) {
                     <td className="al-called">
                       {row.method && <span className="al-method">{row.method}</span>}
                       <code>{row.resource}</code>
+                    </td>
+                    <td className="al-ip">
+                      {row.ip ? (
+                        <code className="al-ip-code">{row.ip}</code>
+                      ) : (
+                        <span className="al-muted">—</span>
+                      )}
                     </td>
                     <td>
                       <span className="al-result" title={codeLabel(row.code)}>
@@ -338,32 +449,149 @@ export default function ActivityLog({ environments, active }: Props) {
           </div>
         )}
 
-        {!loading && total > PAGE_SIZE && (
+        {!loading && (
           <div className="al-pagination">
-            <span>
-              Page {page} of {pageCount} · {total} total
-            </span>
-            <div className="al-pagination-buttons">
+            <span className="al-pageinfo">Page {page} of {pageCount}</span>
+            <nav className="al-page-numbers" aria-label="Pagination">
               <button
                 type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={offset === 0}
-                onClick={() => load(Math.max(0, offset - PAGE_SIZE))}
+                className="al-page-arrow"
+                disabled={page <= 1}
+                aria-label="Previous page"
+                onClick={() => load((page - 2) * pageSize)}
               >
-                <i className="fa-solid fa-chevron-left" /> Previous
+                <i className="fa-solid fa-chevron-left" />
               </button>
+              {pageItems.map((item, idx) =>
+                typeof item === "number" ? (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`al-page-btn${item === page ? " current" : ""}`}
+                    aria-current={item === page ? "page" : undefined}
+                    onClick={() => load((item - 1) * pageSize)}
+                  >
+                    {item}
+                  </button>
+                ) : (
+                  <span key={`gap-${idx}`} className="al-page-ellipsis" aria-hidden="true">
+                    …
+                  </span>
+                ),
+              )}
               <button
                 type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={offset + PAGE_SIZE >= total}
-                onClick={() => load(offset + PAGE_SIZE)}
+                className="al-page-arrow"
+                disabled={page >= pageCount}
+                aria-label="Next page"
+                onClick={() => load(page * pageSize)}
               >
-                Next <i className="fa-solid fa-chevron-right" />
+                <i className="fa-solid fa-chevron-right" />
               </button>
-            </div>
+            </nav>
           </div>
         )}
       </div>
+
+      {detailRow && (
+        <div className="modal-backdrop open" onClick={() => setDetailRow(null)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Call details"
+            style={{ maxWidth: 780 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title">
+                <i className="fa-solid fa-magnifying-glass" /> Call details
+                <span className={`al-surface-badge al-surface-${detailRow.surface}`} style={{ marginLeft: 8 }}>
+                  {detailRow.surface === "mcp" ? "MCP" : "API"}
+                </span>
+              </div>
+              <button className="modal-close" onClick={() => setDetailRow(null)} aria-label="Close">
+                <i className="fa-solid fa-xmark" />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <dl className="al-detail-grid">
+                <div>
+                  <dt>Time</dt>
+                  <dd>{formatTime(detailRow.created_at)}</dd>
+                </div>
+                <div>
+                  <dt>Caller</dt>
+                  <dd>
+                    {detailRow.actor_email || (
+                      <span className="al-muted">Unresolved</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Environment</dt>
+                  <dd>{detailRow.environment_name || "—"}</dd>
+                </div>
+                <div>
+                  <dt>IP address</dt>
+                  <dd>
+                    {detailRow.ip ? (
+                      <code className="al-ip-code">{detailRow.ip}</code>
+                    ) : (
+                      <span className="al-muted">—</span>
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Category</dt>
+                  <dd>{categoryLabel(detailRow.category)}</dd>
+                </div>
+                <div>
+                  <dt>Action</dt>
+                  <dd>{detailRow.action || "—"}</dd>
+                </div>
+                <div>
+                  <dt>Method</dt>
+                  <dd>{detailRow.method || "—"}</dd>
+                </div>
+                <div className="al-detail-resource">
+                  <dt>Resource</dt>
+                  <dd>
+                    <code>{detailRow.resource}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Status</dt>
+                  <dd>{detailRow.status_code ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>Result</dt>
+                  <dd>
+                    <span className="al-result-text">
+                      {detailRow.allowed ? "Allowed" : "Denied"}
+                    </span>
+                    {detailRow.code ? (
+                      <span className="al-status" title={codeLabel(detailRow.code)}>
+                        {detailRow.code}
+                      </span>
+                    ) : null}
+                  </dd>
+                </div>
+              </dl>
+
+              <ActivityPayloadBlock title="Request payload" payload={detailRow.request_payload} />
+              <ActivityPayloadBlock title="Response payload" payload={detailRow.response_payload} />
+            </div>
+
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setDetailRow(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

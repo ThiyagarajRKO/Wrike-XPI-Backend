@@ -18,6 +18,9 @@ export interface ActivityRow {
   code: string | null;
   status_code: number | null;
   ip: string | null;
+  category: string | null;
+  request_payload: unknown;
+  response_payload: unknown;
   created_at: string;
 }
 

@@ -12,6 +12,10 @@ const {
   SURFACE,
 } = require("../utils/environmentAccess.js");
 const { log: logActivity } = require("../utils/activityLog.js");
+const {
+  captureRequest,
+  buildResponseSnapshot,
+} = require("../utils/capture.js");
 
 /**
  * Fastify plugin that exposes the MCP (Model Context Protocol) endpoint.
@@ -29,6 +33,27 @@ const { log: logActivity } = require("../utils/activityLog.js");
 module.exports = async function (fastify, opts) {
   const serverUrl = process.env.APP_URL || "http://localhost:3000";
   const baseResourceMetadataUrl = `${serverUrl}/.well-known/oauth-protected-resource/api/v1/wrikexpi/mcp`;
+
+  // Capture the response for non-hijacked MCP replies (the authorised
+  // streaming path never reaches onSend — those rows carry no response
+  // payload, and the UI shows "not captured" for them).
+  fastify.addHook("onSend", (req, reply, payload, done) => {
+    try {
+      if (
+        payload !== undefined &&
+        payload !== null &&
+        typeof payload !== "function"
+      ) {
+        req.activityResponsePayload = buildResponseSnapshot(
+          reply.statusCode,
+          payload,
+        );
+      }
+    } catch {
+      req.activityResponsePayload = null;
+    }
+    done();
+  });
 
   const sendUnauthorized = (reply, description, resourceMetadataUrl) => {
     reply
@@ -50,7 +75,14 @@ module.exports = async function (fastify, opts) {
     // Activity log — one row per MCP request (the REST path logs one row
     // per HTTP call the same way; MCP has no per-tool-call hook to attach to
     // in this build, so the request itself is the unit logged here).
-    const recordActivity = ({ envId, environmentName, actorEmail, allowed, code, statusCode }) =>
+    const recordActivity = ({
+      envId,
+      environmentName,
+      actorEmail,
+      allowed,
+      code,
+      statusCode,
+    }) =>
       logActivity({
         envId: envId || null,
         environmentName: environmentName || null,
@@ -63,19 +95,34 @@ module.exports = async function (fastify, opts) {
         code,
         statusCode,
         ip: clientIp(req),
+        category: "mcp",
+        requestPayload: captureRequest(req),
+        responsePayload: req.activityResponsePayload || null,
       });
 
     const authHeader = req.headers.authorization || "";
     const [scheme, token] = authHeader.split(" ");
     if (scheme?.toLowerCase() !== "bearer" || !token) {
       recordActivity({ allowed: false, code: "UNAUTHORIZED", statusCode: 401 });
-      return sendUnauthorized(reply, "Authorization required", resourceMetadataUrl);
+      return sendUnauthorized(
+        reply,
+        "Authorization required",
+        resourceMetadataUrl,
+      );
     }
 
     const auth = await resolveAuth(token);
     if (!auth) {
-      recordActivity({ allowed: false, code: "TOKEN_INVALID", statusCode: 401 });
-      return sendUnauthorized(reply, "Token is invalid or expired", resourceMetadataUrl);
+      recordActivity({
+        allowed: false,
+        code: "TOKEN_INVALID",
+        statusCode: 401,
+      });
+      return sendUnauthorized(
+        reply,
+        "Token is invalid or expired",
+        resourceMetadataUrl,
+      );
     }
 
     // Environment access scope, immediately after token validation — same
@@ -167,7 +214,10 @@ module.exports = async function (fastify, opts) {
 
   fastify.post("/mcp", handleMcpPost(baseResourceMetadataUrl));
   fastify.post("/mcp/:environmentId", (req, reply) =>
-    handleMcpPost(`${baseResourceMetadataUrl}/${req.params.environmentId}`)(req, reply),
+    handleMcpPost(`${baseResourceMetadataUrl}/${req.params.environmentId}`)(
+      req,
+      reply,
+    ),
   );
 
   // ── MCP GET health endpoint ──────────────────────────────────────

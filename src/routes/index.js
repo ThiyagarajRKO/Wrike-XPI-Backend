@@ -11,6 +11,11 @@ import { portalApiRoute } from "./portal";
 // Auth Middleware
 import { ValidateToken } from "../middlewares/authentication";
 import { log as logActivity } from "../utils/activityLog";
+import {
+  captureRequest,
+  buildResponseSnapshot,
+  categoryForUrl,
+} from "../utils/capture";
 
 // GET/HEAD read; everything else is a write. Only used to label the activity
 // log's `action` column — matches the read/create/update/delete vocabulary
@@ -24,7 +29,8 @@ const ACTION_BY_METHOD = {
   PATCH: "update",
   DELETE: "delete",
 };
-const actionForMethod = (method) => ACTION_BY_METHOD[String(method || "").toUpperCase()] || null;
+const actionForMethod = (method) =>
+  ACTION_BY_METHOD[String(method || "").toUpperCase()] || null;
 
 // MCP Plugin
 import mcpPlugin from "../plugins/mcp";
@@ -97,6 +103,26 @@ export const PrivateRouters = (fastify, opts, done) => {
     ValidateToken(req, reply, fastify),
   );
 
+  // Capture the response that went on the wire (bounded + sanitised — see
+  // src/utils/capture.js) so the console can show what the caller got back.
+  fastify.addHook("onSend", (req, reply, payload, done) => {
+    try {
+      if (
+        payload !== undefined &&
+        payload !== null &&
+        typeof payload !== "function"
+      ) {
+        req.activityResponsePayload = buildResponseSnapshot(
+          reply.statusCode,
+          payload,
+        );
+      }
+    } catch {
+      req.activityResponsePayload = null;
+    }
+    done();
+  });
+
   // Activity log — one row per request, written after the response is
   // already on the wire so logging never adds latency to the caller. Covers
   // every outcome: a clean 200, a gate denial (req.access set, allowed:
@@ -104,6 +130,7 @@ export const PrivateRouters = (fastify, opts, done) => {
   // never reached, so this falls back to the response status alone).
   fastify.addHook("onResponse", (req, reply, done) => {
     const access = req.access;
+    const resource = req.routeOptions?.url || req.raw?.url || req.url;
 
     logActivity({
       envId: req.envId || null,
@@ -111,12 +138,15 @@ export const PrivateRouters = (fastify, opts, done) => {
       surface: "rest",
       actorEmail: req.callerEmail || null,
       action: actionForMethod(req.method),
-      resource: req.routeOptions?.url || req.raw?.url || req.url,
+      resource,
       method: req.method,
       allowed: access ? !!access.allowed : reply.statusCode < 400,
       code: access?.code || (reply.statusCode >= 400 ? "AUTH_FAILED" : null),
       statusCode: reply.statusCode,
       ip: access?.ip || req.ip || null,
+      category: categoryForUrl(resource),
+      requestPayload: captureRequest(req),
+      responsePayload: req.activityResponsePayload || null,
     });
 
     done();

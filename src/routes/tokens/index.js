@@ -5,8 +5,66 @@ import { Tokens } from "../../controllers";
 import { WrikeTokenExchangeSchema } from "./schema/wrikeTokenExchange";
 import { GetUserDataSchema } from "./schema/getUserData";
 import { ValidateJWT } from "../../middlewares/authentication";
+import { log as logActivity } from "../../utils/activityLog";
+import { captureRequest, buildResponseSnapshot } from "../../utils/capture";
+
+const ACTION_BY_METHOD = {
+  GET: "read",
+  HEAD: "read",
+  OPTIONS: "read",
+  POST: "create",
+  PUT: "update",
+  PATCH: "update",
+  DELETE: "delete",
+};
+const actionForMethod = (method) =>
+  ACTION_BY_METHOD[String(method || "").toUpperCase()] || null;
 
 export const tokenRoute = (fastify, opts, done) => {
+  // Token-service calls (OAuth exchange/callback/profile) are logged to the
+  // audit log too — category "token" — so token traffic is visible beside
+  // API/MCP calls. Anything secret in these calls (authorization codes,
+  // refresh tokens, state) is redacted by captureRequest before storage.
+  fastify.addHook("onSend", (req, reply, payload, done) => {
+    try {
+      if (
+        payload !== undefined &&
+        payload !== null &&
+        typeof payload !== "function"
+      ) {
+        req.activityResponsePayload = buildResponseSnapshot(
+          reply.statusCode,
+          payload,
+        );
+      }
+    } catch {
+      req.activityResponsePayload = null;
+    }
+    done();
+  });
+  fastify.addHook("onResponse", (req, reply, done) => {
+    const resource =
+      req.routeOptions?.url ||
+      String(req.raw?.url || req.url || "").split("?")[0];
+    logActivity({
+      envId: null,
+      environmentName: null,
+      surface: "rest",
+      actorEmail: null,
+      action: actionForMethod(req.method),
+      resource,
+      method: req.method,
+      allowed: reply.statusCode < 400,
+      code: reply.statusCode >= 400 ? "TOKEN_ERROR" : null,
+      statusCode: reply.statusCode,
+      ip: req.ip || null,
+      category: "token",
+      requestPayload: captureRequest(req),
+      responsePayload: req.activityResponsePayload || null,
+    });
+    done();
+  });
+
   fastify.post("/profile", GetUserDataSchema, async (req, reply) => {
     try {
       const token = req.body?.token;

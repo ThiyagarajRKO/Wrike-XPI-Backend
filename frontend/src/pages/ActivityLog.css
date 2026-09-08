@@ -298,9 +298,140 @@
   color: var(--text-muted);
 }
 
-.al-pagination-buttons {
+/* Rows-per-page toolbar — sits above the table, mirrors the "Show X rows"
+   length control used by the DataTables pages in this console. */
+.al-toolbar {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.al-range {
+  font-variant-numeric: tabular-nums;
+}
+
+.al-pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.al-pagesize-select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 5px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.al-pagesize-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Numbered pagination — replaces the previous/next buttons with explicit
+   page numbers (ellipses for large result sets). */
+.al-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.al-pageinfo {
+  font-variant-numeric: tabular-nums;
+}
+
+.al-page-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.al-page-btn:hover:not(.current) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.al-page-btn.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+  cursor: default;
+}
+
+.al-page-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.al-page-ellipsis {
+  padding: 0 2px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+/* Prev/next chevrons flank the page numbers, DataTables/TanStack style:
+   ‹ 1 2 3 … › — a square hit target like the number buttons but with no
+   fill, so the chevrons read as navigation while numbers read as pages. */
+.al-page-arrow {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.al-page-arrow:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.al-page-arrow:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.al-page-arrow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -346,4 +477,143 @@
   .al-called code {
     max-width: 160px;
   }
+
+  .al-toolbar,
+  .al-pagination {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Call details — clickable rows + the row-click modal ────────────── */
+
+.al-row-clickable {
+  cursor: pointer;
+}
+
+.al-row-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.al-ip {
+  font-size: 12px;
+}
+
+.al-ip-code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.al-muted {
+  color: var(--text-muted);
+}
+
+.al-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px 18px;
+  margin: 0 0 20px;
+}
+
+.al-detail-grid > div {
+  min-width: 0;
+}
+
+.al-detail-grid dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.al-detail-grid dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.al-detail-resource {
+  grid-column: 1 / -1;
+}
+
+.al-detail-resource dd code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  display: block;
+  overflow-x: auto;
+}
+
+.al-payload-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: var(--bg-card);
+}
+
+.al-payload-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.al-copy-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.al-copy-btn:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.al-json {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 260px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.al-no-payload {
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-style: italic;
 }

@@ -21,6 +21,9 @@ const ROW_ATTRS = [
   "code",
   "status_code",
   "ip",
+  "category",
+  "request_payload",
+  "response_payload",
   "created_at",
 ];
 
@@ -37,6 +40,9 @@ export const Record = async (entry) => {
     code: entry.code || null,
     status_code: entry.statusCode ?? null,
     ip: entry.ip || null,
+    category: entry.category || null,
+    request_payload: entry.requestPayload || null,
+    response_payload: entry.responsePayload || null,
   });
 };
 
@@ -56,7 +62,8 @@ export const List = async ({
 } = {}) => {
   const where = {};
   if (envId) where.env_id = envId;
-  if (actorEmail) where.actor_email = { [Op.iLike]: `%${actorEmail.trim().toLowerCase()}%` };
+  if (actorEmail)
+    where.actor_email = { [Op.iLike]: `%${actorEmail.trim().toLowerCase()}%` };
   if (surface) where.surface = surface;
   if (allowed !== undefined && allowed !== null) where.allowed = allowed;
   if (from || to) {

@@ -32,6 +32,9 @@ module.exports = (sequelize, DataTypes) => {
       code: { type: DataTypes.STRING(64), allowNull: true },
       status_code: { type: DataTypes.INTEGER, allowNull: true },
       ip: { type: DataTypes.STRING(64), allowNull: true },
+      category: { type: DataTypes.STRING(32), allowNull: true },
+      request_payload: { type: DataTypes.JSON, allowNull: true },
+      response_payload: { type: DataTypes.JSON, allowNull: true },
       created_at: { type: DataTypes.DATE },
     },
     {
