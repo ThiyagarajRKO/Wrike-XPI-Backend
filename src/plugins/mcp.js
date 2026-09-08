@@ -14,7 +14,7 @@ const {
 const { log: logActivity } = require("../utils/activityLog.js");
 const {
   captureRequest,
-  // buildResponseSnapshot, // response-payload capture disabled for now
+  buildResponseSnapshot,
 } = require("../utils/capture.js");
 
 /**
@@ -37,17 +37,26 @@ module.exports = async function (fastify, opts) {
   // Capture the response for non-hijacked MCP replies (the authorised
   // streaming path never reaches onSend — those rows carry no response
   // payload, and the UI shows "not captured" for them).
-  // Response-payload capture disabled for now (kept in git history).
-  // fastify.addHook("onSend", (req, reply, payload, done) => {
-  //   try {
-  //     if (payload !== undefined && payload !== null && typeof payload !== "function") {
-  //       req.activityResponsePayload = buildResponseSnapshot(reply.statusCode, payload);
-  //     }
-  //   } catch {
-  //     req.activityResponsePayload = null;
-  //   }
-  //   done();
-  // });
+  // Store the response body for everything EXCEPT the 200/201 success path —
+  // most rows are those, so skipping them keeps the table lean while still
+  // capturing the payloads that matter (gate denials, 4xx/5xx, etc.).
+  fastify.addHook("onSend", (req, reply, payload, done) => {
+    try {
+      const code = reply.statusCode;
+      const capture = !(code === 200 || code === 201);
+      if (
+        capture &&
+        payload !== undefined &&
+        payload !== null &&
+        typeof payload !== "function"
+      ) {
+        req.activityResponsePayload = buildResponseSnapshot(code, payload);
+      }
+    } catch {
+      req.activityResponsePayload = null;
+    }
+    done();
+  });
 
   const sendUnauthorized = (reply, description, resourceMetadataUrl) => {
     reply
@@ -91,7 +100,7 @@ module.exports = async function (fastify, opts) {
         ip: clientIp(req),
         category: "mcp",
         requestPayload: captureRequest(req),
-        // responsePayload: req.activityResponsePayload || null, // disabled for now
+        responsePayload: req.activityResponsePayload || null,
       });
 
     const authHeader = req.headers.authorization || "";

@@ -13,7 +13,7 @@ import { ValidateToken } from "../middlewares/authentication";
 import { log as logActivity } from "../utils/activityLog";
 import {
   captureRequest,
-  // buildResponseSnapshot, // response-payload capture disabled for now
+  buildResponseSnapshot,
   categoryForUrl,
 } from "../utils/capture";
 
@@ -103,17 +103,26 @@ export const PrivateRouters = (fastify, opts, done) => {
     ValidateToken(req, reply, fastify),
   );
 
-  // Response-payload capture is disabled for now (kept in git history).
-  // fastify.addHook("onSend", (req, reply, payload, done) => {
-  //   try {
-  //     if (payload !== undefined && payload !== null && typeof payload !== "function") {
-  //       req.activityResponsePayload = buildResponseSnapshot(reply.statusCode, payload);
-  //     }
-  //   } catch {
-  //     req.activityResponsePayload = null;
-  //   }
-  //   done();
-  // });
+  // Store the response body for everything EXCEPT the 200/201 success path —
+  // most rows are those, so skipping them keeps the table lean while still
+  // capturing the payloads that matter (gate denials, 4xx/5xx, etc.).
+  fastify.addHook("onSend", (req, reply, payload, done) => {
+    try {
+      const code = reply.statusCode;
+      const capture = !(code === 200 || code === 201);
+      if (
+        capture &&
+        payload !== undefined &&
+        payload !== null &&
+        typeof payload !== "function"
+      ) {
+        req.activityResponsePayload = buildResponseSnapshot(code, payload);
+      }
+    } catch {
+      req.activityResponsePayload = null;
+    }
+    done();
+  });
 
   // Activity log — one row per request, written after the response is
   // already on the wire so logging never adds latency to the caller. Covers
@@ -138,7 +147,7 @@ export const PrivateRouters = (fastify, opts, done) => {
       ip: access?.ip || req.ip || null,
       category: categoryForUrl(resource),
       requestPayload: captureRequest(req),
-      // responsePayload: req.activityResponsePayload || null, // disabled for now
+      responsePayload: req.activityResponsePayload || null,
     });
 
     done();
