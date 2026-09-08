@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
  * so a refresh (or a shared/bookmarked link) lands back on the same
  * dashboard section instead of always resetting to the default. Neither the
  * original EJS dashboards nor this app ever persisted the active tab before
- * (checked the full git history) — this is a new capability, not a restored
+ * (checked the full git history) - this is a new capability, not a restored
  * one. Uses history.replaceState (not location.hash=) so switching tabs
  * doesn't spam the browser's back-button history; back/forward and manual
  * hash edits are still picked up via the hashchange listener.

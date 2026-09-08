@@ -1,7 +1,7 @@
 /*
   Matches the .env-select look shared with the MCP OAuth picker
-  (src/routes/oauth/index.js renderEnvironmentPicker) — same translucent
-  glass surface, border, and #34d399 focus accent — just with a search
+  (src/routes/oauth/index.js renderEnvironmentPicker) - same translucent
+  glass surface, border, and #34d399 focus accent - just with a search
   input + custom option list instead of a native <select>.
 */
 .searchable-select {

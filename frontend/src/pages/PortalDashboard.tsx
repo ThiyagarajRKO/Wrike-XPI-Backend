@@ -30,7 +30,7 @@ function decodeJwtPayload(token: string): { username?: string } | null {
 }
 
 function formatLocalDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return "-";
   try {
     const date = new Date(dateStr);
     return date.toLocaleString("en-US", {
@@ -193,7 +193,7 @@ export default function PortalDashboard() {
 
   const recentEnvs = environments.slice(0, 5);
 
-  /* ── Environments table (DataTables) — imperative bridge ─────────────
+  /* ── Environments table (DataTables) - imperative bridge ─────────────
      DataTables restructures its container's DOM heavily (detaches/re-wraps
      the filter, length, info and pagination controls). Handing it a
      container React never renders into keeps that restructuring from ever
@@ -509,7 +509,7 @@ export default function PortalDashboard() {
                   <i className="fa-solid fa-layer-group" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.total : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.total : "-"}</div>
                   <div className="stat-label">Total Environments</div>
                 </div>
               </div>
@@ -518,7 +518,7 @@ export default function PortalDashboard() {
                   <i className="fa-solid fa-circle-check" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.active : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.active : "-"}</div>
                   <div className="stat-label">Active</div>
                 </div>
               </div>
@@ -527,7 +527,7 @@ export default function PortalDashboard() {
                   <i className="fa-solid fa-circle-xmark" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.inactive : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.inactive : "-"}</div>
                   <div className="stat-label">Inactive</div>
                 </div>
               </div>
@@ -536,7 +536,7 @@ export default function PortalDashboard() {
                   <i className="fa-solid fa-eye" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.visible : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.visible : "-"}</div>
                   <div className="stat-label">Visible</div>
                 </div>
               </div>

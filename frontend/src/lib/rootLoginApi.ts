@@ -6,7 +6,7 @@ export interface RootLoginInit {
 const DEFAULT_INIT: RootLoginInit = { environments: [], selectedEnvironment: "" };
 
 /**
- * GET /environments — the environment list + which one is pre-selected,
+ * GET /environments - the environment list + which one is pre-selected,
  * fetched client-side instead of being server-injected into the HTML.
  * Forwards the same query params findRedirectionURL already reads
  * (environmentId/environment) so a deep link still pre-selects correctly.
@@ -26,7 +26,7 @@ export const fetchEnvironments = async (): Promise<RootLoginInit> => {
 };
 
 /**
- * GET /get-redirect-url — same endpoint the original inline script already
+ * GET /get-redirect-url - same endpoint the original inline script already
  * calls whenever the environment dropdown changes.
  */
 export const fetchRedirectUrl = async (params: {

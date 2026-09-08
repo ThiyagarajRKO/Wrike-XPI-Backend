@@ -1,4 +1,4 @@
-/* API Access Control — app-shell screen.
+/* API Access Control - app-shell screen.
    Tokens, radii, shadows and type all come from AdminDashboard.css; nothing
    new is defined here. Every class is `ac-` prefixed so it can never collide
    with the shell it lives inside. */
@@ -97,7 +97,7 @@
 /* ═══════════════════════════════════════════════════════════
    THE GATE CHAIN
    The whole feature in one glance: three checks, in order, all
-   of which must pass. This is the explanation — the prose
+   of which must pass. This is the explanation - the prose
    version of it is deliberately not on the page.
    ═══════════════════════════════════════════════════════════ */
 
@@ -360,7 +360,7 @@
   white-space: nowrap;
 }
 
-/* Identity cell — the address is the primary read, everything
+/* Identity cell - the address is the primary read, everything
    else in the cell is supporting detail. */
 .ac-identity {
   display: flex;
@@ -419,7 +419,7 @@
 
 /* ═══════════════════════════════════════════════════════════
    PERMISSION PILLS
-   Full words, not R/C/U/D — this table is read by people who
+   Full words, not R/C/U/D - this table is read by people who
    do not write the API calls it governs.
    ═══════════════════════════════════════════════════════════ */
 
@@ -557,7 +557,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   STATES — loading, empty, disabled. Designed, not implied.
+   STATES - loading, empty, disabled. Designed, not implied.
    ═══════════════════════════════════════════════════════════ */
 
 .ac-skeleton-row td {
@@ -609,7 +609,7 @@
   line-height: 1.6;
 }
 
-/* Deployment-wide enforcement is off — the single most important
+/* Deployment-wide enforcement is off - the single most important
    thing an admin can know on this screen, so it sits above it. */
 .ac-audit-banner {
   display: flex;
@@ -643,7 +643,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ACCESS CHECK — the simulator
+   ACCESS CHECK - the simulator
    Renders the decision as the pipeline it actually is.
    ═══════════════════════════════════════════════════════════ */
 
@@ -902,15 +902,17 @@
 }
 
 .ac-grant-option-title {
+  display: block;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .ac-grant-option-desc {
+  display: block;
   font-size: 11.5px;
   color: var(--text-muted);
-  margin-top: 1px;
+  margin-top: 2px;
   line-height: 1.4;
 }
 
@@ -935,7 +937,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════
-   MOTION — app-shell track. Panel switches, staggered table
+   MOTION - app-shell track. Panel switches, staggered table
    entrances, skeleton shimmer. Transform and opacity only.
    ═══════════════════════════════════════════════════════════ */
 
@@ -957,7 +959,7 @@
 
   .ac-table tbody tr.ac-row-in {
     animation: acRowIn 0.18s ease-out both;
-    /* Only the first handful stagger — past that the delay would
+    /* Only the first handful stagger - past that the delay would
        read as the table being slow rather than arriving. */
     animation-delay: calc(var(--row-index, 0) * 40ms);
   }
@@ -974,7 +976,7 @@
   }
 
   /* A skeleton sweep is ambient, not a response to an action: it loops for as
-     long as the wait lasts, so it is paced (1.2s) and linear — an eased sweep
+     long as the wait lasts, so it is paced (1.2s) and linear - an eased sweep
      visibly stalls at each end, which reads as the load having hung. The
      300ms UI budget governs reactions to input, not this. */
   .ac-skeleton {
@@ -1066,7 +1068,7 @@
    API access is now scoped to one environment, opened from that
    environment's row. A right-hand drawer keeps the environment
    list visible behind it, so an admin comparing environments
-   never loses their place — and the environment is implied by
+   never loses their place - and the environment is implied by
    what they clicked, so there is no picker to re-ask them.
    ═══════════════════════════════════════════════════════════ */
 

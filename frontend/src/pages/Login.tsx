@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { getAccessToken, login, setAccessToken, setTotpToken } from "../lib/authApi";
 import "./Login.css";
 
-// Faithful React port of the original views/admin/login.ejs design — same
+// Faithful React port of the original views/admin/login.ejs design - same
 // markup/classes/copy, but interactivity (password visibility, loading,
 // error) is driven by React state instead of direct DOM manipulation.
 export default function Login() {

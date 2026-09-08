@@ -36,7 +36,7 @@ function decodeJwtPayload(
 }
 
 function formatLocalDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return "-";
   try {
     return new Date(dateStr).toLocaleString("en-US", {
       year: "numeric",
@@ -48,7 +48,7 @@ function formatLocalDate(dateStr: string | null | undefined): string {
       hour12: true,
     });
   } catch {
-    return "——";
+    return "--";
   }
 }
 
@@ -58,9 +58,9 @@ function escHtml(str: string | null | undefined): string {
   return div.innerHTML;
 }
 
-/** Mask helper — shows first 6 chars + bullets, ported 1:1 from the EJS `mask()`. */
+/** Mask helper - shows first 6 chars + bullets, ported 1:1 from the EJS `mask()`. */
 function maskHtml(str: string | null | undefined): string {
-  if (!str) return '<span class="mval">—</span>';
+  if (!str) return '<span class="mval">-</span>';
   const visible = escHtml(str.substring(0, Math.min(6, str.length)));
   return `<span class="mval">${visible}••••••</span>`;
 }
@@ -236,7 +236,7 @@ export default function PortalHome() {
 
   const recentEnvs = environments.slice(0, 5);
 
-  /* ── Environments table (DataTables) — imperative bridge, same approach
+  /* ── Environments table (DataTables) - imperative bridge, same approach
      as PortalDashboard.tsx: DataTables restructures its container's DOM
      heavily, so it gets a container React never renders into. ─────────── */
   useEffect(() => {
@@ -372,7 +372,7 @@ export default function PortalHome() {
   }, [environments, loaded, activePage]);
 
   /* Delegated click handlers for the edit/delete buttons DataTables owns.
-     (The copy-id-btn in the table has no handler in the original EJS —
+     (The copy-id-btn in the table has no handler in the original EJS -
      it's inert there too, so it stays inert here.) */
   useEffect(() => {
     const $ = window.jQuery;
@@ -722,7 +722,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-layer-group" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.total : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.total : "-"}</div>
                   <div className="stat-label">Total Environments</div>
                 </div>
               </div>
@@ -731,7 +731,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-circle-check" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.active : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.active : "-"}</div>
                   <div className="stat-label">Active</div>
                 </div>
               </div>
@@ -740,7 +740,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-circle-xmark" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.inactive : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.inactive : "-"}</div>
                   <div className="stat-label">Inactive</div>
                 </div>
               </div>
@@ -749,7 +749,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-eye" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.visible : "—"}</div>
+                  <div className="stat-value">{loaded ? stats.visible : "-"}</div>
                   <div className="stat-label">Visible</div>
                 </div>
               </div>

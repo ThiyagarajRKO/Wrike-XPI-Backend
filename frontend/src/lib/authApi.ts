@@ -1,6 +1,6 @@
 // Storage keys match the existing EJS flow exactly (views/admin/totp.ejs and
 // views/admin/dashboard.ejs read these same keys and are unchanged by this
-// pilot) — the interim TOTP challenge token lives in sessionStorage, the
+// pilot) - the interim TOTP challenge token lives in sessionStorage, the
 // final access token in localStorage.
 const TOTP_TOKEN_KEY = "totp_token";
 const ACCESS_TOKEN_KEY = "access_token";
@@ -23,7 +23,7 @@ export const clearAdminSession = (): void => {
 };
 
 /**
- * Bearer-token fetch wrapper for the admin dashboard — mirrors the EJS
+ * Bearer-token fetch wrapper for the admin dashboard - mirrors the EJS
  * page's global fetch interceptor (views/admin/dashboard.ejs): on any 401 or
  * 403 response it clears localStorage, redirects to /admin/login, and
  * rejects so calling code's `await` never resolves with the stale response.
@@ -48,7 +48,7 @@ export const adminFetch = async (
 };
 
 /**
- * POST /api/v1/admin/logout — same JSON API the EJS page already calls.
+ * POST /api/v1/admin/logout - same JSON API the EJS page already calls.
  */
 export const adminLogout = async (): Promise<void> => {
   try {
@@ -70,7 +70,7 @@ export const clearTotpToken = (): void => {
 };
 
 /**
- * POST /api/v1/admin/login — same JSON API the EJS page already calls,
+ * POST /api/v1/admin/login - same JSON API the EJS page already calls,
  * unchanged by this migration. Throws with a user-facing message on failure.
  */
 export const login = async (
@@ -97,7 +97,7 @@ export const login = async (
 };
 
 /**
- * POST /api/v1/admin/totp/verify — same JSON API the EJS page already calls.
+ * POST /api/v1/admin/totp/verify - same JSON API the EJS page already calls.
  */
 export const verifyTotp = async (
   totpToken: string,

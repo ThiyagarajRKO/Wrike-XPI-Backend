@@ -331,7 +331,7 @@
         display: none !important;
       }
 
-      /* Collapse toggle — inside logo row header */
+      /* Collapse toggle - inside logo row header */
       .sidebar-collapse-btn {
         width: 28px;
         height: 28px;
@@ -438,7 +438,7 @@
         display: none;
       }
 
-      /* Sign-out icon button — inline with user row */
+      /* Sign-out icon button - inline with user row */
       .signout-icon-btn {
         width: 30px;
         height: 30px;

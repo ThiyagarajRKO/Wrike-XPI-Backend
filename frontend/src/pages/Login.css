@@ -1,5 +1,5 @@
 /*
-  Ported verbatim from the original views/admin/login.ejs design — same
+  Ported verbatim from the original views/admin/login.ejs design - same
   variables, same selectors, same values. Nothing redesigned; only the
   interactive bits (password toggle, loading, error) moved from vanilla DOM
   manipulation into React state/props.

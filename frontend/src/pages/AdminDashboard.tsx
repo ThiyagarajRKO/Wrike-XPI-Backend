@@ -62,7 +62,7 @@ function escHtml(str: string | null | undefined): string {
 }
 
 function formatLocalDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "—";
+  if (!dateStr) return "-";
   try {
     const date = new Date(dateStr);
     return date.toLocaleString("en-US", {
@@ -80,7 +80,7 @@ function formatLocalDate(dateStr: string | null | undefined): string {
 }
 
 function puFmtDate(d: string | null | undefined): string {
-  if (!d) return "—";
+  if (!d) return "-";
   return new Date(d).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -89,14 +89,14 @@ function puFmtDate(d: string | null | undefined): string {
 }
 
 function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
+  if (!Number.isFinite(bytes) || bytes <= 0) return "-";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function mask(str: string | null | undefined): string {
-  if (!str) return '<span class="mval">—</span>';
+  if (!str) return '<span class="mval">-</span>';
   const visible = escHtml(str.substring(0, Math.min(6, str.length)));
   return '<span class="mval">' + visible + "••••••</span>";
 }
@@ -361,10 +361,10 @@ function puRowHtml(u: PortalUser): string {
     escHtml(u.username) +
     "</strong></td>" +
     "<td>" +
-    (u.full_name ? escHtml(u.full_name) : '<span style="color:var(--text-muted)">—</span>') +
+    (u.full_name ? escHtml(u.full_name) : '<span style="color:var(--text-muted)">-</span>') +
     "</td>" +
     '<td style="font-size:12.5px;">' +
-    (u.email ? escHtml(u.email) : '<span style="color:var(--text-muted)">—</span>') +
+    (u.email ? escHtml(u.email) : '<span style="color:var(--text-muted)">-</span>') +
     "</td>" +
     "<td>" +
     puRoleBadge(u.role) +
@@ -495,7 +495,7 @@ function cacheRowHtml(entry: CacheEntry): string {
 }
 
 /** Restructures a freshly-initialized DataTables wrapper so only the table
- * itself scrolls horizontally — identical rearrangement in all three tables
+ * itself scrolls horizontally - identical rearrangement in all three tables
  * (env / users / cache), ported from the EJS's repeated setTimeout blocks. */
 function restructureDataTableWrapper($: any, tableSelector: string, container: HTMLElement) {
   const $wrapper = $(container).find(tableSelector).closest(".dataTables_wrapper");
@@ -534,7 +534,7 @@ function restructureDataTableWrapper($: any, tableSelector: string, container: H
   return { $wrapper, $filter, $length, $info, $paginate };
 }
 
-/* ── Copy-icon button — used by the several "copy URL" icons in modals ─── */
+/* ── Copy-icon button - used by the several "copy URL" icons in modals ─── */
 function CopyIconButton({
   id,
   getText,
@@ -592,7 +592,7 @@ export default function AdminDashboard() {
   const envTableContainerRef = useRef<HTMLDivElement>(null);
   const envDataTableRef = useRef<any>(null);
 
-  // API access is a drawer over the environment list, not a page — the
+  // API access is a drawer over the environment list, not a page - the
   // environment is whichever row's shield button was clicked.
   const [accessDrawerEnvId, setAccessDrawerEnvId] = useState<string | null>(null);
   const [accessDrawerOpen, setAccessDrawerOpen] = useState(false);
@@ -632,7 +632,7 @@ export default function AdminDashboard() {
 
   const recentEnvs = environments.slice(0, 5);
 
-  /* Environments table — imperative DataTables bridge (see PortalDashboard
+  /* Environments table - imperative DataTables bridge (see PortalDashboard
      for the rationale: DataTables restructures the DOM heavily, so we hand
      it a container React never renders children into). */
   useEffect(() => {
@@ -740,7 +740,7 @@ export default function AdminDashboard() {
   }, [environments]);
 
   /* Delegated click handlers for the recent-envs (overview) copy/edit/dup
-     buttons — same JSX-rendered table, but action-cell buttons are wired
+     buttons - same JSX-rendered table, but action-cell buttons are wired
      with a small ref-scoped delegation, matching the env table above. */
   const recentEnvsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -799,8 +799,8 @@ export default function AdminDashboard() {
     envModalMode === "add"
       ? "Add Environment"
       : envModalMode === "duplicate"
-        ? `Duplicate — ${environments.find((e) => e.id === duplicateSourceId)?.environment_name ?? ""}`
-        : `Edit — ${environments.find((e) => e.id === editingId)?.environment_name ?? ""}`;
+        ? `Duplicate - ${environments.find((e) => e.id === duplicateSourceId)?.environment_name ?? ""}`
+        : `Edit - ${environments.find((e) => e.id === editingId)?.environment_name ?? ""}`;
 
   function openAddModal() {
     setEditingId(null);
@@ -1264,7 +1264,7 @@ export default function AdminDashboard() {
       const data = await getPermissionOverview(puUsers.map((u) => u.id));
       setPermsSummaries(data || {});
     } catch {
-      // The matrix column is supporting detail — a failure here leaves the
+      // The matrix column is supporting detail - a failure here leaves the
       // table usable rather than blanking the whole page.
     }
   }, [puUsers]);
@@ -1418,7 +1418,7 @@ export default function AdminDashboard() {
 
   /* ── Dead-in-the-original "Generated Credentials" modal ─────────────
      views/admin/dashboard.ejs ships this modal's markup (#puGenCredsModalBackdrop)
-     but never wires anything to open it — the real "Auto Fill" flow (above)
+     but never wires anything to open it - the real "Auto Fill" flow (above)
      fills the Add User form directly. Kept here, inert, for visual fidelity. */
   const [puGenCredsModalOpen, setPuGenCredsModalOpen] = useState(false);
 
@@ -1920,7 +1920,7 @@ export default function AdminDashboard() {
                   <i className="fa-solid fa-layer-group" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{envLoaded ? stats.total : "—"}</div>
+                  <div className="stat-value">{envLoaded ? stats.total : "-"}</div>
                   <div className="stat-label">Total Environments</div>
                 </div>
               </div>
@@ -1929,7 +1929,7 @@ export default function AdminDashboard() {
                   <i className="fa-solid fa-circle-check" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{envLoaded ? stats.active : "—"}</div>
+                  <div className="stat-value">{envLoaded ? stats.active : "-"}</div>
                   <div className="stat-label">Active</div>
                 </div>
               </div>
@@ -1938,7 +1938,7 @@ export default function AdminDashboard() {
                   <i className="fa-solid fa-circle-xmark" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{envLoaded ? stats.inactive : "—"}</div>
+                  <div className="stat-value">{envLoaded ? stats.inactive : "-"}</div>
                   <div className="stat-label">Inactive</div>
                 </div>
               </div>
@@ -1947,7 +1947,7 @@ export default function AdminDashboard() {
                   <i className="fa-solid fa-key" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{envLoaded ? stats.withApi : "—"}</div>
+                  <div className="stat-value">{envLoaded ? stats.withApi : "-"}</div>
                   <div className="stat-label">With API Keys</div>
                 </div>
               </div>
@@ -2289,7 +2289,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ═══════════ PU: GENERATE CREDENTIALS MODAL (inert — see comment above) ═══════════ */}
+      {/* ═══════════ PU: GENERATE CREDENTIALS MODAL (inert - see comment above) ═══════════ */}
       <div className={`modal-backdrop${puGenCredsModalOpen ? " open show" : ""}`}>
         <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 400 }}>
           <div className="modal-header">
@@ -2323,7 +2323,7 @@ export default function AdminDashboard() {
                 marginTop: 4,
               }}
             >
-              <i className="fa-solid fa-triangle-exclamation" /> Store this password safely — it cannot be recovered.
+              <i className="fa-solid fa-triangle-exclamation" /> Store this password safely - it cannot be recovered.
             </div>
           </div>
           <div className="modal-footer">
@@ -2403,7 +2403,7 @@ export default function AdminDashboard() {
         <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 440 }}>
           <div className="modal-header">
             <div className="modal-title">
-              <i className="fa-solid fa-user-pen" /> Edit User — <span style={{ fontWeight: 500 }}>{puEditUsernameDisplay}</span>
+              <i className="fa-solid fa-user-pen" /> Edit User - <span style={{ fontWeight: 500 }}>{puEditUsernameDisplay}</span>
             </div>
             <button className="modal-close" onClick={() => setPuEditModalOpen(false)}>
               <i className="fa-solid fa-xmark" />
@@ -2483,7 +2483,7 @@ export default function AdminDashboard() {
         <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 480 }}>
           <div className="modal-header">
             <div className="modal-title">
-              <i className="fa-solid fa-plug" /> Manage Environments — <span style={{ fontWeight: 500 }}>{puAssignUsername}</span>
+              <i className="fa-solid fa-plug" /> Manage Environments - <span style={{ fontWeight: 500 }}>{puAssignUsername}</span>
             </div>
             <button className="modal-close" onClick={() => setPuAssignModalOpen(false)}>
               <i className="fa-solid fa-xmark" />
@@ -2925,12 +2925,12 @@ export default function AdminDashboard() {
           <div className="modal-body">
             <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
               <div>
-                <strong>Key:</strong> <span>{cacheDetailKey || "—"}</span>
+                <strong>Key:</strong> <span>{cacheDetailKey || "-"}</span>
               </div>
               <div>
-                <strong>Type:</strong> <span>{cacheDetailType || "—"}</span>
+                <strong>Type:</strong> <span>{cacheDetailType || "-"}</span>
                 <span style={{ marginLeft: 12 }}>
-                  <strong>TTL:</strong> <span>{cacheDetailTtl || "—"}</span>
+                  <strong>TTL:</strong> <span>{cacheDetailTtl || "-"}</span>
                 </span>
               </div>
             </div>

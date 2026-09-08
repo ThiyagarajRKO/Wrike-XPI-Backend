@@ -1,6 +1,6 @@
 // Storage keys match the existing EJS flow exactly (views/portal/dashboard.ejs
 // and views/portal/user.ejs read these same keys, unchanged by this
-// migration) — distinct from the admin app's keys (portal_* prefix).
+// migration) - distinct from the admin app's keys (portal_* prefix).
 const ACCESS_TOKEN_KEY = "portal_access_token";
 const ROLE_KEY = "portal_role";
 
@@ -30,7 +30,7 @@ export const portalHomeFor = (role: string | null): string =>
   role === "admin" ? "/portal/dashboard" : "/portal/home";
 
 /**
- * POST /api/v1/portal/auth/login — same JSON API the EJS page already calls.
+ * POST /api/v1/portal/auth/login - same JSON API the EJS page already calls.
  */
 export const portalLogin = async (
   username: string,
@@ -56,7 +56,7 @@ export const portalLogin = async (
 };
 
 /**
- * POST /api/v1/portal/auth/change-password — same JSON API the EJS page
+ * POST /api/v1/portal/auth/change-password - same JSON API the EJS page
  * already calls.
  */
 export const changePortalPassword = async (
@@ -86,7 +86,7 @@ export const changePortalPassword = async (
 /**
  * Thrown by `portalFetch` when the response is 401/403, after the caller's
  * session has already been cleared and the browser redirected to
- * /portal/login — mirrors the EJS dashboard's global `window.fetch`
+ * /portal/login - mirrors the EJS dashboard's global `window.fetch`
  * interceptor, scoped to the calls a given page actually makes instead of
  * monkey-patching the global fetch.
  */
@@ -132,7 +132,7 @@ export interface PortalEnvironment {
 }
 
 /**
- * GET /api/v1/portal/environments/ — same JSON API the EJS dashboard already
+ * GET /api/v1/portal/environments/ - same JSON API the EJS dashboard already
  * calls.
  */
 export const listPortalEnvironments = async (
@@ -156,7 +156,7 @@ export const listPortalEnvironments = async (
 
 /**
  * Full environment record, as used by the portal "My Environments" CRUD page
- * (views/portal/user.ejs) — a superset of PortalEnvironment carrying the
+ * (views/portal/user.ejs) - a superset of PortalEnvironment carrying the
  * credential and datahub-id fields the add/edit modal reads and writes.
  */
 export interface PortalEnvironmentFull {
@@ -180,7 +180,7 @@ export interface PortalEnvironmentFull {
 }
 
 /**
- * GET /api/v1/portal/environments/ — same JSON API the EJS user page already
+ * GET /api/v1/portal/environments/ - same JSON API the EJS user page already
  * calls, kept full-fidelity (raw fields, no boolean/string coercion) since
  * this page's edit modal round-trips every field back to the server as-is.
  */
@@ -211,7 +211,7 @@ export interface PortalEnvironmentInput {
 }
 
 /**
- * POST /api/v1/portal/environments/ — same JSON API the EJS user page's
+ * POST /api/v1/portal/environments/ - same JSON API the EJS user page's
  * "Add Environment" save button already calls.
  */
 export const createPortalEnvironment = async (
@@ -229,7 +229,7 @@ export const createPortalEnvironment = async (
 };
 
 /**
- * PUT /api/v1/portal/environments/:id — same JSON API the EJS user page's
+ * PUT /api/v1/portal/environments/:id - same JSON API the EJS user page's
  * "Edit Environment" save button already calls.
  */
 export const updatePortalEnvironment = async (
@@ -248,7 +248,7 @@ export const updatePortalEnvironment = async (
 };
 
 /**
- * DELETE /api/v1/portal/environments/:id — same JSON API the EJS user page's
+ * DELETE /api/v1/portal/environments/:id - same JSON API the EJS user page's
  * delete button already calls.
  */
 export const deletePortalEnvironment = async (
@@ -263,7 +263,7 @@ export const deletePortalEnvironment = async (
 };
 
 /**
- * POST /api/v1/portal/logout — same JSON API the EJS dashboard already
+ * POST /api/v1/portal/logout - same JSON API the EJS dashboard already
  * calls.
  */
 export const portalLogout = async (token: string): Promise<void> => {

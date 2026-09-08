@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { clearTotpToken, getTotpToken, setAccessToken, verifyTotp } from "../lib/authApi";
 import "./AdminTotp.css";
 
-// Faithful React port of views/admin/totp.ejs — same markup/CSS/copy;
+// Faithful React port of views/admin/totp.ejs - same markup/CSS/copy;
 // numeric filtering, auto-submit-on-6-digits, and session-guard are all
 // state/effect driven instead of manual DOM event wiring.
 export default function AdminTotp() {

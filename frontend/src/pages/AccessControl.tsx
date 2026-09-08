@@ -4,17 +4,12 @@ import {
   ACTION_NAMES,
   bulkCreateRules,
   createRule,
-  deletePermission,
   deleteRule,
   getAccessConfig,
   grantColumn,
-  grantedActions,
-  listPermissions,
   listRules,
   simulateAccess,
-  updatePermission,
   updateRule,
-  upsertPermission,
   type AccessConfig,
   type AccessGate,
   type AccessRule,
@@ -22,7 +17,6 @@ import {
   type Grant,
   type RuleType,
   type SimulationResult,
-  type UserPermission,
 } from "../lib/accessApi";
 import { confirmDanger, escHtml, progress, toast } from "../lib/notify";
 import "./AccessControl.css";
@@ -39,15 +33,14 @@ const ACTION_COPY: Record<ActionName, { label: string; blurb: string }> = {
   delete: { label: "Delete", blurb: "Permanently remove records" },
 };
 
-// Rows past this point render without an entrance delay — staggering a long
+// Rows past this point render without an entrance delay - staggering a long
 // table reads as slowness, not polish.
 const STAGGER_LIMIT = 12;
 
-type TabId = "allowlist" | "permissions" | "check";
+type TabId = "allowlist" | "check";
 
 const TABS: Array<{ id: TabId; label: string; icon: string }> = [
   { id: "allowlist", label: "Allow list", icon: "fa-address-book" },
-  { id: "permissions", label: "Permissions", icon: "fa-user-shield" },
   { id: "check", label: "Access check", icon: "fa-vial-circle-check" },
 ];
 
@@ -61,7 +54,7 @@ const EMPTY_GRANT: Grant = {
 interface Props {
   /** Every environment, used only to offer sources for "copy from". */
   environments: AdminEnvironment[];
-  /** The environment this drawer governs. Never a picker — the admin already
+  /** The environment this drawer governs. Never a picker - the admin already
       chose it by clicking a row, so re-asking would be a second decision for
       the same intent. */
   envId: string | null;
@@ -207,7 +200,7 @@ export default function AccessControl({
   onClose,
 }: Props) {
   // Narrowed once here so the rest of the component can treat it as a plain
-  // string — the drawer never renders content without an environment anyway.
+  // string - the drawer never renders content without an environment anyway.
   const envId = envIdProp ?? "";
 
   const [config, setConfig] = useState<AccessConfig | null>(null);
@@ -215,7 +208,6 @@ export default function AccessControl({
   const [tab, setTab] = useState<TabId>("allowlist");
 
   const [rules, setRules] = useState<AccessRule[]>([]);
-  const [permissions, setPermissions] = useState<UserPermission[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -248,20 +240,6 @@ export default function AccessControl({
     grant: Grant;
   }>({ open: false, text: "", grant: EMPTY_GRANT });
 
-  const [userModal, setUserModal] = useState<{
-    open: boolean;
-    editing: UserPermission | null;
-    email: string;
-    displayName: string;
-    grant: Grant;
-  }>({
-    open: false,
-    editing: null,
-    email: "",
-    displayName: "",
-    grant: EMPTY_GRANT,
-  });
-
   const [saving, setSaving] = useState(false);
 
   const [simEmail, setSimEmail] = useState("");
@@ -282,16 +260,10 @@ export default function AccessControl({
       if (!id) return;
       setLoading(true);
       try {
-        const [ruleRows, permissionRows] = await Promise.all([
-          listRules(id),
-          listPermissions(id),
-        ]);
-        setRules(ruleRows);
-        setPermissions(permissionRows);
+        setRules(await listRules(id));
       } catch (err: any) {
         toast(err?.message || "Failed to load access settings", "error");
         setRules([]);
-        setPermissions([]);
       } finally {
         setLoading(false);
       }
@@ -299,7 +271,7 @@ export default function AccessControl({
     [],
   );
 
-  // Deferred until the drawer is first opened — the console keeps it mounted
+  // Deferred until the drawer is first opened - the console keeps it mounted
   // so it can animate, and none of this is needed until someone looks at it.
   useEffect(() => {
     if (!open || loadedOnce.current) return;
@@ -308,7 +280,7 @@ export default function AccessControl({
     getAccessConfig().then(setConfig).catch(() => {});
   }, [open]);
 
-  // Each opening is a fresh question about one environment — start on the
+  // Each opening is a fresh question about one environment - start on the
   // first tab rather than wherever the previous environment was left.
   useEffect(() => {
     if (open) setTab("allowlist");
@@ -329,7 +301,7 @@ export default function AccessControl({
   }, [open, onClose]);
 
   useEffect(() => {
-    // A new environment is a different question — old answers shouldn't linger.
+    // A new environment is a different question - old answers shouldn't linger.
     setSimResult(null);
     setSearch("");
   }, [envId]);
@@ -345,16 +317,6 @@ export default function AccessControl({
         (r.label || "").toLowerCase().includes(needle),
     );
   }, [rules, search]);
-
-  const filteredPermissions = useMemo(() => {
-    const needle = search.trim().toLowerCase();
-    if (!needle) return permissions;
-    return permissions.filter(
-      (p) =>
-        p.email.includes(needle) ||
-        (p.display_name || "").toLowerCase().includes(needle),
-    );
-  }, [permissions, search]);
 
   const enabledRules = rules.filter((r) => r.is_enabled).length;
   const domainRules = rules.filter((r) => r.rule_type === "domain").length;
@@ -416,33 +378,6 @@ export default function AccessControl({
         rows.map((r) => (r.id === rule.id ? { ...r, is_enabled: !next } : r)),
       );
       toast(err?.message || "Could not change the switch", "error");
-    }
-  };
-
-  const togglePermissionGrant = async (
-    permission: UserPermission,
-    action: ActionName,
-    next: boolean,
-  ) => {
-    setSavingCell({ id: permission.id, action });
-
-    setPermissions((rows) =>
-      rows.map((p) =>
-        p.id === permission.id ? { ...p, [grantColumn(action)]: next } : p,
-      ),
-    );
-
-    try {
-      await updatePermission(permission.id, { [grantColumn(action)]: next });
-    } catch (err: any) {
-      setPermissions((rows) =>
-        rows.map((p) =>
-          p.id === permission.id ? { ...p, [grantColumn(action)]: !next } : p,
-        ),
-      );
-      toast(err?.message || "Could not update permissions", "error");
-    } finally {
-      setSavingCell(null);
     }
   };
 
@@ -527,33 +462,6 @@ export default function AccessControl({
     }
   };
 
-  const submitUser = async () => {
-    const email = userModal.email.trim().toLowerCase();
-    if (!email) {
-      toast("Enter the user's Wrike email address", "warning");
-      return;
-    }
-
-    setSaving(true);
-    progress.start();
-    try {
-      await upsertPermission({
-        env_id: envId,
-        email,
-        display_name: userModal.displayName.trim() || null,
-        ...userModal.grant,
-      });
-      toast(`Access saved for ${email}`, "success");
-      setUserModal((m) => ({ ...m, open: false }));
-      await afterWrite();
-    } catch (err: any) {
-      toast(err?.message || "Could not save access", "error");
-    } finally {
-      setSaving(false);
-      progress.done();
-    }
-  };
-
   const removeRule = async (rule: AccessRule) => {
     const ok = await confirmDanger({
       title: "Remove from allow list?",
@@ -573,28 +481,6 @@ export default function AccessControl({
       await afterWrite();
     } catch (err: any) {
       toast(err?.message || "Could not remove the entry", "error");
-    } finally {
-      progress.done();
-    }
-  };
-
-  const removePermission = async (permission: UserPermission) => {
-    const ok = await confirmDanger({
-      title: "Remove this user's permissions?",
-      html:
-        `<strong>${escHtml(permission.email)}</strong> will fall back to ` +
-        `whatever their allow-list entry grants.`,
-      confirmText: "Remove",
-    });
-    if (!ok) return;
-
-    progress.start();
-    try {
-      await deletePermission(permission.id);
-      toast("Per-user access removed", "success");
-      await afterWrite();
-    } catch (err: any) {
-      toast(err?.message || "Could not remove access", "error");
     } finally {
       progress.done();
     }
@@ -637,22 +523,6 @@ export default function AccessControl({
         : EMPTY_GRANT,
     });
 
-  const openUserModal = (permission: UserPermission | null) =>
-    setUserModal({
-      open: true,
-      editing: permission,
-      email: permission?.email || "",
-      displayName: permission?.display_name || "",
-      grant: permission
-        ? {
-            can_read: permission.can_read,
-            can_create: permission.can_create,
-            can_update: permission.can_update,
-            can_delete: permission.can_delete,
-          }
-        : EMPTY_GRANT,
-    });
-
   return (
     <div
       className={`ac-scrim${open ? " open" : ""}`}
@@ -674,7 +544,7 @@ export default function AccessControl({
             <div>
               <div className="ac-drawer-name">API Access</div>
               <div className="ac-drawer-env">
-                {selectedEnv?.environment_name || "—"}
+                {selectedEnv?.environment_name || "-"}
               </div>
             </div>
           </div>
@@ -697,7 +567,7 @@ export default function AccessControl({
             <div className="ac-audit-title">Enforcement is currently off</div>
             <div className="ac-audit-desc">
               Rules below are saved and evaluated, but refused calls are only
-              logged — nobody is actually blocked. Set{" "}
+              logged - nobody is actually blocked. Set{" "}
               <code>ACCESS_CONTROL_ENABLED=true</code> to start enforcing.
             </div>
           </div>
@@ -711,7 +581,7 @@ export default function AccessControl({
           <div>
             <div className="ac-gate-title">On the allow list</div>
             <div className="ac-gate-desc">
-              Their email address — or its whole domain — must be listed and
+              Their email address - or its whole domain - must be listed and
               switched on for this environment.
             </div>
             <div
@@ -740,17 +610,10 @@ export default function AccessControl({
           <div>
             <div className="ac-gate-title">Allowed to do it</div>
             <div className="ac-gate-desc">
-              Read, Create, Update and Delete are granted separately — by
-              allow-list entry, or per person.
+              Read, Create, Update and Delete are granted separately, by
+              whatever this entry on the allow list grants.
             </div>
-            <div
-              className={`ac-gate-metric${
-                permissions.length ? "" : " ac-muted"
-              }`}
-            >
-              {permissions.length} individual grant
-              {permissions.length === 1 ? "" : "s"}
-            </div>
+            <div className="ac-gate-metric ac-muted">Set per allow-list entry</div>
           </div>
         </div>
       </div>
@@ -772,9 +635,6 @@ export default function AccessControl({
             {t.label}
             {t.id === "allowlist" && rules.length > 0 && (
               <span className="ac-tab-count">{rules.length}</span>
-            )}
-            {t.id === "permissions" && permissions.length > 0 && (
-              <span className="ac-tab-count">{permissions.length}</span>
             )}
           </button>
         ))}
@@ -974,192 +834,6 @@ export default function AccessControl({
         </div>
       )}
 
-      {/* ══════════ PERMISSIONS ══════════ */}
-      {tab === "permissions" && (
-        <div
-          className="ac-panel"
-          role="tabpanel"
-          id="ac-panel-permissions"
-          aria-labelledby="ac-tab-permissions"
-        >
-          <div className="ac-toolbar">
-            <div className="ac-search">
-              <i className="fa-solid fa-magnifying-glass" aria-hidden="true" />
-              <input
-                type="search"
-                value={search}
-                placeholder="Search people…"
-                aria-label="Search granted users"
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <div className="ac-toolbar-actions">
-              <button type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => openUserModal(null)}
-              >
-                <i className="fa-solid fa-user-plus" aria-hidden="true" />
-                &nbsp;Grant access
-              </button>
-            </div>
-          </div>
-
-          <div className="ac-table-card">
-            <div className="ac-scroll">
-              <table className="ac-table">
-                <caption className="sr-only">
-                  Individual permission grants in{" "}
-                  {selectedEnv?.environment_name}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Person</th>
-                    <th scope="col">Can do</th>
-                    <th scope="col">Also on the allow list?</th>
-                    <th scope="col" className="ac-col-actions">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading && <SkeletonRows columns={4} />}
-
-                  {!loading &&
-                    filteredPermissions.map((permission, index) => {
-                      const domain = permission.email.split("@")[1] || "";
-                      const covering =
-                        rules.find(
-                          (r) =>
-                            r.rule_type === "email" &&
-                            r.value === permission.email,
-                        ) ||
-                        rules.find(
-                          (r) => r.rule_type === "domain" && r.value === domain,
-                        );
-
-                      return (
-                        <tr
-                          key={permission.id}
-                          className="ac-row-in"
-                          style={
-                            {
-                              "--row-index": Math.min(index, STAGGER_LIMIT),
-                            } as React.CSSProperties
-                          }
-                        >
-                          <td>
-                            <div className="ac-identity">
-                              <span className="ac-identity-icon" aria-hidden="true">
-                                {permission.email.charAt(0).toUpperCase()}
-                              </span>
-                              <div className="ac-identity-main">
-                                <div className="ac-identity-value">
-                                  {permission.display_name || permission.email}
-                                </div>
-                                {permission.display_name && (
-                                  <div className="ac-identity-sub">
-                                    {permission.email}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            {grantedActions(permission).length === 0 ? (
-                              <span className="ac-grant-none">
-                                Nothing — effectively blocked
-                              </span>
-                            ) : null}
-                            <GrantPills
-                              grant={permission}
-                              busy={
-                                savingCell?.id === permission.id
-                                  ? savingCell.action
-                                  : null
-                              }
-                              onToggle={(action, next) =>
-                                togglePermissionGrant(permission, action, next)
-                              }
-                            />
-                          </td>
-                          <td>
-                            {covering ? (
-                              <span className="ac-source">
-                                Yes —{" "}
-                                <strong>
-                                  {covering.rule_type === "domain"
-                                    ? `@${covering.value}`
-                                    : covering.value}
-                                </strong>
-                                {!covering.is_enabled && " (switched off)"}
-                              </span>
-                            ) : (
-                              <span
-                                className="badge badge-warning"
-                                title="These permissions have no effect until this person is also on the allow list"
-                              >
-                                <i className="fa-solid fa-triangle-exclamation" />
-                                &nbsp;Not listed
-                              </span>
-                            )}
-                          </td>
-                          <td className="ac-col-actions">
-                            <div className="ac-row-actions">
-                              <button type="button"
-                                className="ac-icon-btn"
-                                title="Edit person"
-                                aria-label={`Edit ${permission.email}`}
-                                onClick={() => openUserModal(permission)}
-                              >
-                                <i className="fa-solid fa-pen" />
-                              </button>
-                              <button type="button"
-                                className="ac-icon-btn ac-danger"
-                                title="Remove per-user access"
-                                aria-label={`Remove ${permission.email}`}
-                                onClick={() => removePermission(permission)}
-                              >
-                                <i className="fa-solid fa-trash" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-
-            {!loading && permissions.length === 0 && (
-              <EmptyState
-                icon="fa-user-shield"
-                title="Everyone is using their default access"
-                desc="People on the allow list already get whatever their entry grants. Add someone here only when they need something different — a colleague who may delete, or one who should be read-only."
-                action={
-                  <button type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => openUserModal(null)}
-                  >
-                    <i className="fa-solid fa-user-plus" aria-hidden="true" />
-                    &nbsp;Grant access to someone
-                  </button>
-                }
-              />
-            )}
-
-            {!loading &&
-              permissions.length > 0 &&
-              filteredPermissions.length === 0 && (
-                <EmptyState
-                  icon="fa-magnifying-glass"
-                  title="Nothing matches that search"
-                  desc={`Nobody granted here matches “${search}”.`}
-                />
-              )}
-          </div>
-        </div>
-      )}
-
       {/* ══════════ ACCESS CHECK ══════════ */}
       {tab === "check" && (
         <div
@@ -1220,7 +894,7 @@ export default function AccessControl({
               <EmptyState
                 icon="fa-vial-circle-check"
                 title="No check run yet"
-                desc="The result shows each of the three gates in order, so you can see precisely which one would stop someone — and fix that one."
+                desc="The result shows each of the three gates in order, so you can see precisely which one would stop someone - and fix that one."
               />
             )}
 
@@ -1269,7 +943,7 @@ export default function AccessControl({
                       <div>
                         <div className="ac-step-label">
                           {gate.label}
-                          {gate.status === "pending" && " — checked live"}
+                          {gate.status === "pending" && " - checked live"}
                         </div>
                         <div className="ac-step-detail">{gate.detail}</div>
                       </div>
@@ -1389,7 +1063,7 @@ export default function AccessControl({
 
               <div className="form-group">
                 <label className="form-label" htmlFor="ac-rule-label">
-                  Note <span style={{ color: "var(--text-muted)" }}>— optional</span>
+                  Note <span style={{ color: "var(--text-muted)" }}>- optional</span>
                 </label>
                 <input
                   id="ac-rule-label"
@@ -1531,115 +1205,6 @@ export default function AccessControl({
                 aria-hidden="true"
               />
               &nbsp;Add them
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ══════════ GRANT / EDIT USER ══════════ */}
-      <div className={`modal-backdrop${userModal.open ? " open" : ""}`}>
-        <div
-          className="modal"
-          role="dialog"
-          aria-modal="true"
-          aria-label={
-            userModal.editing ? "Edit user permissions" : "Grant user access"
-          }
-          style={{ maxWidth: 520 }}
-        >
-          <div className="modal-header">
-            <div className="modal-title">
-              <i className="fa-solid fa-user-shield" />
-              {userModal.editing ? "Edit permissions" : "Grant access"}
-            </div>
-            <button type="button"
-              className="modal-close"
-              aria-label="Close"
-              onClick={() => setUserModal((m) => ({ ...m, open: false }))}
-            >
-              <i className="fa-solid fa-xmark" />
-            </button>
-          </div>
-
-          <div className="modal-body">
-            <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
-              <div className="form-group">
-                <label className="form-label" htmlFor="ac-user-email">
-                  Wrike email address
-                </label>
-                <input
-                  id="ac-user-email"
-                  className="form-control"
-                  type="email"
-                  placeholder="person@company.com"
-                  value={userModal.email}
-                  readOnly={!!userModal.editing}
-                  onChange={(e) =>
-                    setUserModal((m) => ({ ...m, email: e.target.value }))
-                  }
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="ac-user-name">
-                  Name{" "}
-                  <span style={{ color: "var(--text-muted)" }}>— optional</span>
-                </label>
-                <input
-                  id="ac-user-name"
-                  className="form-control"
-                  type="text"
-                  placeholder="Alex Morgan"
-                  value={userModal.displayName}
-                  onChange={(e) =>
-                    setUserModal((m) => ({ ...m, displayName: e.target.value }))
-                  }
-                />
-              </div>
-
-              <hr className="form-divider" />
-
-              <div className="form-group">
-                <label className="form-label">What they can do</label>
-                <p
-                  style={{
-                    fontSize: 12.5,
-                    color: "var(--text-muted)",
-                    marginBottom: 10,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  This replaces whatever their allow-list entry would have
-                  given them. They still need to be on the allow list, and to
-                  have “{fieldName}” enabled in Wrike.
-                </p>
-                <GrantPicker
-                  grant={userModal.grant}
-                  onChange={(grant) => setUserModal((m) => ({ ...m, grant }))}
-                />
-              </div>
-            </form>
-          </div>
-
-          <div className="modal-footer">
-            <button type="button"
-              className="btn btn-ghost"
-              onClick={() => setUserModal((m) => ({ ...m, open: false }))}
-            >
-              Cancel
-            </button>
-            <button type="button"
-              className="btn btn-primary"
-              disabled={saving}
-              onClick={submitUser}
-            >
-              <i
-                className={`fa-solid ${
-                  saving ? "fa-spinner fa-spin" : "fa-check"
-                }`}
-                aria-hidden="true"
-              />
-              &nbsp;Save access
             </button>
           </div>
         </div>

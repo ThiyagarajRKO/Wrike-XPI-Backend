@@ -6,10 +6,10 @@ import "./RootLogin.css";
 // Faithful React port of the inline HTML in src/index.js's GET / handler,
 // with one deliberate improvement over the original: the button's target
 // URL now stays in sync as the dropdown changes (verified against the full
-// git history — the original only ever resolved the URL at click time, so
+// git history - the original only ever resolved the URL at click time, so
 // this is a new behavior, not a restored one) instead of only resolving on
 // click. Environment list / selected env / redirect URL are fetched
-// client-side (GET /environments, GET /get-redirect-url) — redirectUri/
+// client-side (GET /environments, GET /get-redirect-url) - redirectUri/
 // accountId are plain pass-through query params, read straight from the
 // current URL, same as any other page.
 const searchParams = new URLSearchParams(window.location.search);
@@ -38,7 +38,7 @@ export default function RootLogin() {
   }, []);
 
   // Keep the button's target URL in sync with whichever environment is
-  // currently selected — covers both the initial selection and every
+  // currently selected - covers both the initial selection and every
   // subsequent dropdown change with one effect.
   useEffect(() => {
     if (!environment) return;

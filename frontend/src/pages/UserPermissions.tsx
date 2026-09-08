@@ -46,7 +46,7 @@ interface Props {
 }
 
 /**
- * The single answer to "what can this person actually do?" — portal role,
+ * The single answer to "what can this person actually do?" - portal role,
  * environment scope, and the module matrix, in one panel.
  *
  * A right-hand drawer rather than a centred modal: the matrix is tall and
@@ -65,7 +65,7 @@ export default function UserPermissions({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Catalog is vocabulary, not user data — fetch once and keep it.
+  // Catalog is vocabulary, not user data - fetch once and keep it.
   useEffect(() => {
     if (!open || catalog) return;
     getPermissionCatalog().then(setCatalog).catch(() => {});
@@ -205,7 +205,7 @@ export default function UserPermissions({
             <div className="up-identity">
               <div className="up-name">{person}</div>
               <div className="up-sub">
-                {summary?.user.email || summary?.user.username || "—"}
+                {summary?.user.email || summary?.user.username || "-"}
               </div>
             </div>
           </div>
@@ -250,7 +250,7 @@ export default function UserPermissions({
                     />
                     <span>
                       No environments assigned. Everything below is inert until{" "}
-                      {person} is given at least one environment — assign one
+                      {person} is given at least one environment - assign one
                       from the user&apos;s <strong>Manage Environments</strong>{" "}
                       action.
                     </span>
@@ -307,7 +307,7 @@ export default function UserPermissions({
                   ))}
                 </div>
                 <p className="up-hint">
-                  A role is a shortcut, not a lock — tick anything below and
+                  A role is a shortcut, not a lock - tick anything below and
                   the role simply becomes <strong>Custom</strong>.
                 </p>
               </section>
@@ -388,7 +388,7 @@ export default function UserPermissions({
                                       title={`${mod.label} has nothing to ${action}`}
                                       aria-label="Not applicable"
                                     >
-                                      —
+                                      -
                                     </span>
                                   )}
                                 </td>

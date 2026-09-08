@@ -2,7 +2,7 @@ import { adminFetch } from "./authApi";
 
 /* ── Types ──────────────────────────────────────────────────────────────
    Mirrors /api/v1/admin/permissions/* (src/routes/admin/permissions/index.js).
-   The module and role vocabulary is *fetched*, not declared here — the
+   The module and role vocabulary is *fetched*, not declared here - the
    backend catalog (src/utils/permissionCatalog.js) is the single authority,
    so adding a module there grows this UI without a frontend edit. */
 
@@ -12,7 +12,7 @@ export interface ModuleDef {
   key: string;
   label: string;
   description: string;
-  /** Actions this module can actually express — others render disabled. */
+  /** Actions this module can actually express - others render disabled. */
   actions: ActionName[];
 }
 
@@ -50,7 +50,7 @@ export interface UserAccessSummary {
   };
   environment_scope: ScopedEnvironment[];
   permissions: PermissionMatrix;
-  /** null means the matrix matches no role exactly — show it as "Custom". */
+  /** null means the matrix matches no role exactly - show it as "Custom". */
   role: string | null;
   configured: boolean;
 }
@@ -105,7 +105,7 @@ export const getPermissionOverview = (userIds: string[]) =>
 
 /* ── Shaping helpers ────────────────────────────────────────────────── */
 
-/** An all-false matrix shaped to a catalog — the safe starting point. */
+/** An all-false matrix shaped to a catalog - the safe starting point. */
 export const emptyMatrix = (modules: ModuleDef[]): PermissionMatrix =>
   Object.fromEntries(
     modules.map((m) => [
@@ -149,7 +149,7 @@ export const roleLabel = (
   return catalog?.roles.find((r) => r.key === roleKey)?.label || "Custom";
 };
 
-/** Total granted cells — drives the "3 of 13" style summary counts. */
+/** Total granted cells - drives the "3 of 13" style summary counts. */
 export const grantedCount = (
   permissions: PermissionMatrix,
   modules: ModuleDef[],

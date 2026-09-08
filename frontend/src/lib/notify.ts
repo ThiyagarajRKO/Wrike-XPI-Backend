@@ -45,7 +45,7 @@ export function escHtml(str: string | null | undefined): string {
 /**
  * Destructive confirmation. Resolves true when the user goes ahead.
  * Without SweetAlert2 loaded this falls back to the native confirm() rather
- * than silently proceeding — a delete must never happen unasked.
+ * than silently proceeding - a delete must never happen unasked.
  */
 export async function confirmDanger(options: {
   title: string;

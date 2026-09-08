@@ -10,7 +10,7 @@ interface SearchableSelectProps {
   placeholder?: string;
 }
 
-// Small dependency-free searchable combobox — this app deliberately has no
+// Small dependency-free searchable combobox - this app deliberately has no
 // UI/component library (see frontend/package.json), so this is a minimal
 // accessible replacement for a plain <select>, styled to match the existing
 // .env-select look shared with the MCP OAuth picker (src/routes/oauth/index.js

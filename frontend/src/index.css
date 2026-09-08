@@ -1,6 +1,6 @@
 /*
   Minimal global reset only. Each page owns its complete original visual
-  design in its own stylesheet (e.g. pages/Login.css) — no shared design
+  design in its own stylesheet (e.g. pages/Login.css) - no shared design
   system is imposed here, since every migrated page must look exactly like
   its original, not a unified redesign.
 */
@@ -8,7 +8,7 @@
 /* Font Awesome, bundled from node_modules instead of the cdnjs <link> tag
    every *.html entry used to carry. Self-hosted so icons render the same
    whether or not cdnjs.cloudflare.com is reachable from the browser (blocked
-   by a corporate proxy, offline dev, etc.) — every page already imports this
+   by a corporate proxy, offline dev, etc.) - every page already imports this
    file, so importing it here is the one place that fixes all of them. Vite
    resolves the package's relative url(../webfonts/...) references and copies
    the woff2 files into the build automatically. */

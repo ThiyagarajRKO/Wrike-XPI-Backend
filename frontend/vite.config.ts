@@ -5,12 +5,12 @@ import path from "path";
 const root = import.meta.dirname;
 
 // Same routes the Fastify backend serves in production (src/routes/admin,
-// src/routes/portal, src/index.js's GET /) — mapped here purely so `npm run
+// src/routes/portal, src/index.js's GET /) - mapped here purely so `npm run
 // dev` mirrors those URLs locally instead of requiring the raw entry
 // filenames. Production serving is untouched; this only affects the Vite
 // dev server. Every migrated page fetches its data client-side (see
-// frontend/src/lib/*Api.ts, appConfig.ts), so all of them — including the
-// 3 that need real server data — can be served locally by Vite with full
+// frontend/src/lib/*Api.ts, appConfig.ts), so all of them - including the
+// 3 that need real server data - can be served locally by Vite with full
 // HMR; the /api + friends proxy below gets them their data from :4000.
 const DEV_ROUTES: Record<string, string> = {
   "/": "/root-login.html",
@@ -76,7 +76,7 @@ export default defineConfig(({ command }) => {
     server: {
       port: 5174,
       proxy: {
-        // Everything the Fastify backend owns — the REST API, the
+        // Everything the Fastify backend owns - the REST API, the
         // client-fetched page data (environments/redirect-url/app-config),
         // the docs hub, OAuth endpoints/discovery metadata, and the
         // favicon. Extend this list if a new backend-only route is added

@@ -117,7 +117,7 @@ export default function PortalChangePassword() {
     try {
       await changePortalPassword(token, currentPassword, newPassword);
       setAlert({ type: "success", message: "Password updated. Redirecting..." });
-      // Keep the button disabled/loading through the redirect delay too —
+      // Keep the button disabled/loading through the redirect delay too -
       // only the error path re-enables it, so a click can't land during the
       // 1.2s window between success and the page actually navigating away.
       setTimeout(() => {

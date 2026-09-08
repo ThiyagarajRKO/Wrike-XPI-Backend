@@ -6,9 +6,9 @@ export interface AppConfig {
 const DEFAULT_CONFIG: AppConfig = { appUrl: "", wrikeRedirectUrl: "" };
 
 /**
- * GET /api/v1/app-config — non-secret app config (APP_URL / WRIKE_REDIRECT_URL
+ * GET /api/v1/app-config - non-secret app config (APP_URL / WRIKE_REDIRECT_URL
  * env vars) fetched client-side. Shared by AdminDashboard.tsx and
- * PortalHome.tsx, the two pages that need it — only the server knows these
+ * PortalHome.tsx, the two pages that need it - only the server knows these
  * values, so they can't be derived client-side the way other pages' state
  * can, but there's nothing page-specific about them.
  */
