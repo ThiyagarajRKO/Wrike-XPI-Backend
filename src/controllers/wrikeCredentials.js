@@ -1,4 +1,5 @@
 import models from "../../models";
+import { invalidateEnvironment } from "../utils/environmentAccessCache";
 
 // Create a new credential record
 export const Insert = async (profile_id, data, options = {}) => {
@@ -29,6 +30,14 @@ export const Update = async (profile_id, id, data, options = {}) => {
       profile_id,
       ...options,
     });
+
+    // The access gate caches both security switches under one entry per
+    // environment, so any update to this row drops it. Deliberately not
+    // conditional on which fields changed: over-invalidating costs one query
+    // on the next call, while missing a case leaves a stale allow-list
+    // decision in place for up to a TTL. That asymmetry is the whole reason
+    // this moved out of the route handler.
+    await invalidateEnvironment(id);
 
     return wrikeCredentialsUpdated;
   } catch (err) {
@@ -238,6 +247,8 @@ export const DeleteById = async (profile_id, id) => {
       throw { statusCode: 404, message: "Environment not found" };
 
     await credential.destroy({ profile_id });
+    await invalidateEnvironment(id);
+
     return credential;
   } catch (err) {
     throw err;
@@ -258,6 +269,7 @@ export const Delete = async (id) => {
 
     if (credential) {
       await credential.destroy();
+      await invalidateEnvironment(id);
     }
 
     return credential;

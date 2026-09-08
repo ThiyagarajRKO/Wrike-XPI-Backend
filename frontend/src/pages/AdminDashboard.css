@@ -910,11 +910,20 @@
         width: 22px;
         height: 22px;
       }
+      /* The environment UUID under the name. Was an inline style on a <code>
+         inside a hand-built row string. */
+      .env-id-code {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+      /* Low-emphasis cell text, e.g. the "no value" glyph. */
+      .text-muted {
+        color: var(--text-muted);
+      }
 
       /* Actions column stays put while the rest of a wide table scrolls
-         horizontally underneath it — the scrolling ancestor is the
-         overflow-x:auto div restructureDataTableWrapper() wraps the table
-         in, so position:sticky resolves against that, not the viewport. */
+         horizontally underneath it. The scrolling ancestor is .dt2-scroll,
+         so position:sticky resolves against that, not the viewport. */
       .env-actions-col {
         position: sticky;
         right: 0;
@@ -927,11 +936,14 @@
       td.env-actions-col {
         background: var(--bg-card);
       }
-      /* Fixed Actions columns stay neutral on row hover — the sticky cells
+      /* Fixed Actions columns stay neutral on row hover: the sticky cells
          keep their resting background instead of flashing the hover tint
-         (the rest of the row still highlights normally). */
+         (the rest of the row still highlights normally). Covers both the new
+         .dt2-table and the DataTables .dt tables still being migrated. */
       table.dt tbody tr:hover td.env-actions-col,
-      table.dt tbody tr:hover td.pu-actions-col {
+      table.dt tbody tr:hover td.pu-actions-col,
+      .dt2-table tbody tr:hover td.env-actions-col,
+      .dt2-table tbody tr:hover td.pu-actions-col {
         background: var(--bg-card);
       }
       /* Environments-table action icons are deliberately FLAT — no button
@@ -986,63 +998,8 @@
         text-align: center;
       }
 
-      /* The row-menu trigger shows as "pressed" while its menu is open. */
-      .icon-btn.row-menu-open {
-        background: var(--bg-surface);
-        color: var(--accent);
-      }
-
-      /* ─── Row ⋯ menu (floating Actions dropdown) ─────────────────────── */
-      .row-menu {
-        position: fixed;
-        z-index: 3001;
-        min-width: 200px;
-        background: var(--bg-card);
-        border: 1px solid var(--border);
-        border-radius: var(--radius-md);
-        box-shadow: var(--shadow-lg);
-        padding: 6px;
-        display: flex;
-        flex-direction: column;
-      }
-      .row-menu-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        width: 100%;
-        padding: 8px 12px;
-        border: none;
-        background: transparent;
-        border-radius: var(--radius-sm);
-        color: var(--text-primary);
-        font-size: 13px;
-        font-family: inherit;
-        cursor: pointer;
-        text-align: left;
-        white-space: nowrap;
-      }
-      .row-menu-item i {
-        width: 16px;
-        text-align: center;
-        color: var(--text-muted);
-        font-size: 13px;
-        flex: none;
-      }
-      .row-menu-item:hover {
-        background: var(--bg-surface);
-      }
-      .row-menu-item:hover i {
-        color: var(--accent);
-      }
-      .row-menu-item.danger {
-        color: var(--danger);
-      }
-      .row-menu-item.danger i {
-        color: var(--danger);
-      }
-      .row-menu-item.danger:hover {
-        background: rgba(239, 68, 68, 0.08);
-      }
+      /* Row ⋯ menu styles now live with the component that renders them:
+         components/ui/RowMenu.css */
 
       /* Environments-table Visibility/Status switches — a compact variant of
          the full-size .toggle-wrap control (which stays as-is in the edit
@@ -1273,6 +1230,13 @@
       .badge-warning {
         background: var(--warning-soft);
         color: var(--warning);
+      }
+      /* Low-emphasis variant, e.g. the non-admin "User" role. Previously
+         written as inline styles inside a hand-built HTML string. */
+      .badge-neutral {
+        background: var(--bg-surface);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
       }
 
       /* Secret / masked */

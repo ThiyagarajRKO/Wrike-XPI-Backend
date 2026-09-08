@@ -1,8 +1,6 @@
 /* Thin wrapper over the CDN-loaded Toastify global (see
-   frontend/admin-dashboard.html) for screens outside AdminDashboard.tsx,
-   which keeps its own copy of this to stay byte-identical to the original
-   migration. Mirrors that copy's palette/styling exactly so a toast looks
-   the same regardless of which screen raised it. */
+   frontend/admin-dashboard.html). The single toast entry point for every
+   admin screen. */
 
 export type ToastType = "success" | "error" | "info" | "warning";
 
@@ -25,15 +23,22 @@ export function toast(msg: string, type: ToastType = "info") {
   if (!Toastify) return;
 
   const iconCls = TOAST_ICONS[type] || TOAST_ICONS.info;
-  const toastBody =
-    '<div style="display:flex;align-items:center;gap:10px">' +
-    '<i class="fa-solid ' +
-    iconCls +
-    '" style="flex:none;color:#fff;font-size:15px"></i>' +
-    '<span style="flex:1">' +
-    escHtml(msg) +
-    "</span>" +
-    "</div>";
+
+  // Built as DOM nodes, not an HTML string: the message is arbitrary text
+  // (often a server error), and textContent makes it structurally impossible
+  // for it to be parsed as markup.
+  const body = document.createElement("div");
+  body.style.cssText = "display:flex;align-items:center;gap:10px";
+
+  const icon = document.createElement("i");
+  icon.className = `fa-solid ${iconCls}`;
+  icon.style.cssText = "flex:none;color:#fff;font-size:15px";
+
+  const label = document.createElement("span");
+  label.style.flex = "1";
+  label.textContent = msg;
+
+  body.append(icon, label);
 
   const toastInstance = Toastify({
     text: "",
@@ -51,10 +56,11 @@ export function toast(msg: string, type: ToastType = "info") {
       minWidth: "260px",
     },
   }).showToast();
-  // This Toastify build does not honour escapeHTML:false, so the icon/message
-  // markup is injected straight into the toast node after showToast().
+
+  // This Toastify build ignores escapeHTML:false, so the body is attached to
+  // the toast node after showToast() rather than passed as `text`.
   if (toastInstance?.toastElement) {
-    toastInstance.toastElement.innerHTML = toastBody;
+    toastInstance.toastElement.replaceChildren(body);
   }
 }
 

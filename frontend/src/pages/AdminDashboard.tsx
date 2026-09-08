@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { CacheTable } from "./admin/CacheTable";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminLogout, clearAdminSession, getAccessToken } from "../lib/authApi";
 import { fetchAppConfig, type AppConfig } from "../lib/appConfig";
 import { useHashPage } from "../lib/useHashPage";
@@ -28,6 +29,13 @@ import {
 import EnvironmentAccess from "./EnvironmentAccess";
 import PortalUserPermissions from "./PortalUserPermissions";
 import ActivityLog from "./ActivityLog";
+import { EnvironmentsTable } from "./admin/EnvironmentsTable";
+import { PortalUsersTable } from "./admin/PortalUsersTable";
+import { CopyButton } from "../components/ui/CopyButton";
+import { ActiveBadge } from "../components/ui/Badge";
+import { MaskedValue } from "../components/ui/MaskedValue";
+import { copyToClipboard, formatDateTime } from "../lib/format";
+import { escHtml, toast } from "../lib/notify";
 import "./AdminDashboard.css";
 
 type PageId =
@@ -49,267 +57,6 @@ const PAGE_NAMES: Record<PageId, string> = {
 
 const PAGE_IDS = Object.keys(PAGE_NAMES) as PageId[];
 
-const CACHE_SEARCH_DEBOUNCE_MS = 350;
-
-/* ── Small shared helpers (ported 1:1 from the EJS <script>) ───────────── */
-
-function escHtml(str: string | null | undefined): string {
-  const div = document.createElement("div");
-  div.textContent = str || "";
-  return div.innerHTML;
-}
-
-function formatLocalDate(dateStr: string | null | undefined): string {
-  if (!dateStr) return "—";
-  try {
-    const date = new Date(dateStr);
-    return date.toLocaleString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return "--";
-  }
-}
-
-function puFmtDate(d: string | null | undefined): string {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
-}
-
-function mask(str: string | null | undefined): string {
-  if (!str) return '<span class="mval">—</span>';
-  const visible = escHtml(str.substring(0, Math.min(6, str.length)));
-  return '<span class="mval">' + visible + "••••••</span>";
-}
-
-async function copyToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch {
-    // fall through to legacy fallback, same as the original page
-  }
-  const temp = document.createElement("input");
-  document.body.appendChild(temp);
-  temp.value = text;
-  temp.select();
-  document.execCommand("copy");
-  document.body.removeChild(temp);
-}
-
-function toast(msg: string, type: "success" | "error" | "info" | "warning") {
-  const palettes: Record<string, string> = {
-    success: "linear-gradient(135deg, #0ecb81, #3fb950)",
-    error: "linear-gradient(135deg, #f85149, #d03030)",
-    info: "linear-gradient(135deg, #2f81f7, #6e40c9)",
-    warning: "linear-gradient(135deg, #d29922, #e89e1d)",
-  };
-  const icons: Record<string, string> = {
-    success: "fa-circle-check",
-    error: "fa-circle-xmark",
-    info: "fa-circle-info",
-    warning: "fa-triangle-exclamation",
-  };
-  const Toastify = window.Toastify;
-  if (!Toastify) return;
-  const iconCls = icons[type] || "fa-circle-info";
-  const toastBody =
-    '<div style="display:flex;align-items:center;gap:10px">' +
-    '<i class="fa-solid ' +
-    iconCls +
-    '" style="flex:none;color:#fff;font-size:15px"></i>' +
-    '<span style="flex:1">' +
-    escHtml(msg) +
-    "</span>" +
-    "</div>";
-  const toastInstance = Toastify({
-    text: "",
-    duration: 4500,
-    gravity: "top",
-    position: "right",
-    stopOnFocus: true,
-    style: {
-      background: palettes[type] || palettes.info,
-      borderRadius: "8px",
-      fontFamily: "'Inter', sans-serif",
-      fontSize: "13.5px",
-      padding: "12px 18px",
-      boxShadow: "0 6px 24px rgba(0,0,0,0.4)",
-      minWidth: "260px",
-    },
-  }).showToast();
-  // This Toastify build does not honour escapeHTML:false, so the icon/message
-  // markup is injected straight into the toast node after showToast().
-  if (toastInstance?.toastElement) {
-    toastInstance.toastElement.innerHTML = toastBody;
-  }
-}
-
-function badgeHtml(active: boolean): string {
-  return active
-    ? '<span class="badge badge-success"><span class="dot"></span> Active</span>'
-    : '<span class="badge badge-danger"><span class="dot"></span> Inactive</span>';
-}
-
-/* ── Row ⋯ menu (vertical-dots “Actions” dropdown) ────────────────────────
-   Both the Environments and the Portal Users tables collapse their per-row
-   actions into ONE vertical-dots trigger. Clicking it opens a small floating
-   menu appended to <body> (so the DataTables overflow/scrolled containers
-   can never clip it); choosing an item closes the menu and runs the action.
-   Esc, an outside click, resize or page switch closes it too. */
-interface RowMenuItem {
-  label: string;
-  icon: string; // FontAwesome classes, e.g. "fa-solid fa-pen-to-square"
-  danger?: boolean;
-  onClick: () => void;
-}
-
-let rowMenuActive: { el: HTMLElement; close: () => void } | null = null;
-
-function closeRowMenu() {
-  if (!rowMenuActive) return;
-  rowMenuActive.close();
-  rowMenuActive = null;
-}
-
-function openRowMenu(anchor: HTMLElement, items: RowMenuItem[]) {
-  closeRowMenu();
-
-  const menu = document.createElement("div");
-  menu.className = "row-menu";
-  menu.setAttribute("role", "menu");
-
-  items.forEach((item) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "row-menu-item" + (item.danger ? " danger" : "");
-    btn.setAttribute("role", "menuitem");
-    btn.innerHTML =
-      '<i class="' + item.icon + '"></i><span>' + item.label + "</span>";
-    btn.addEventListener("click", () => {
-      closeRowMenu();
-      item.onClick();
-    });
-    menu.appendChild(btn);
-  });
-
-  const close = () => {
-    anchor.classList.remove("row-menu-open");
-    menu.remove();
-    document.removeEventListener("keydown", onKey, true);
-    document.removeEventListener("mousedown", onDocDown, true);
-    window.removeEventListener("resize", onResize);
-    window.removeEventListener("scroll", onScroll, true);
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") closeRowMenu();
-  };
-  const onResize = () => closeRowMenu();
-  const onScroll = () => closeRowMenu();
-  const onDocDown = (e: MouseEvent) => {
-    const target = e.target as Node;
-    // Ignore clicks inside the menu or on its own trigger — the trigger's
-    // delegated click toggles the menu, and menu items close then run.
-    if (menu.contains(target) || anchor.contains(target)) return;
-    closeRowMenu();
-  };
-
-  anchor.classList.add("row-menu-open");
-  document.body.appendChild(menu);
-
-  // Measure while hidden, then place it against the trigger — flipping
-  // upward and clamping to the viewport so it never opens off-screen.
-  menu.style.visibility = "hidden";
-  const anchorRect = anchor.getBoundingClientRect();
-  const menuRect = menu.getBoundingClientRect();
-  let top = anchorRect.bottom + 6;
-  if (top + menuRect.height > window.innerHeight - 8) {
-    top = Math.max(8, anchorRect.top - menuRect.height - 6);
-  }
-  let left = anchorRect.right - menuRect.width;
-  left = Math.max(8, Math.min(left, window.innerWidth - menuRect.width - 8));
-  menu.style.top = top + "px";
-  menu.style.left = left + "px";
-  menu.style.visibility = "visible";
-
-  document.addEventListener("keydown", onKey, true);
-  document.addEventListener("mousedown", onDocDown, true);
-  window.addEventListener("resize", onResize);
-  window.addEventListener("scroll", onScroll, true);
-
-  rowMenuActive = { el: menu, close };
-}
-
-// Raw-HTML toggle for the DataTables-rendered rows (jQuery-owned markup, not
-// React) — matches the .toggle-wrap/.toggle-track control used everywhere
-// else (edit modal, environment access drawer). A delegated `change` handler
-// (see the env table's action-handler effect) reads data-id/data-field back
-// off the element that fired.
-function envToggleHtml(id: string, field: "is_active" | "is_visible", checked: boolean): string {
-  return (
-    '<label class="toggle-wrap toggle-wrap-sm">' +
-    '<input type="checkbox" class="env-toggle" data-id="' +
-    id +
-    '" data-field="' +
-    field +
-    '"' +
-    (checked ? " checked" : "") +
-    " />" +
-    '<div class="toggle-track"></div>' +
-    "</label>"
-  );
-}
-
-// True when the two lists are the SAME rows in the SAME order and every value
-// matches except the is_active/is_visible booleans — i.e. a pure toggle
-// change that can be applied to the existing table in place.
-function envsDifferOnlyByToggles(
-  prev: AdminEnvironment[],
-  next: AdminEnvironment[],
-): boolean {
-  if (prev.length !== next.length) return false;
-  const toggleKeys = new Set(["is_active", "is_visible"]);
-  for (let i = 0; i < prev.length; i++) {
-    const p = prev[i] as unknown as Record<string, unknown>;
-    const n = next[i] as unknown as Record<string, unknown>;
-    const pKeys = Object.keys(p);
-    if (pKeys.length !== Object.keys(n).length) return false;
-    for (const key of pKeys) {
-      if (toggleKeys.has(key)) continue;
-      if (!(key in n) || !Object.is(p[key], n[key])) return false;
-    }
-  }
-  return true;
-}
-
-function puStatusBadge(active: boolean): string {
-  return active
-    ? '<span class="badge badge-success"><span class="dot"></span> Active</span>'
-    : '<span class="badge badge-danger"><span class="dot"></span> Inactive</span>';
-}
-
-function puRoleBadge(role: string): string {
-  return role === "admin"
-    ? '<span class="badge badge-info"><i class="fa-solid fa-shield-halved"></i> Admin</span>'
-    : '<span class="badge" style="background:var(--bg-surface);color:var(--text-muted);border:1px solid var(--border);"><i class="fa-solid fa-user"></i> User</span>';
-}
 
 /* ── Environment form shape (mirrors the #envForm fields) ──────────────── */
 
@@ -380,202 +127,8 @@ function envToDuplicateForm(env: AdminEnvironment): EnvFormState {
   };
 }
 
-const ENV_TABLE_HEAD = `
-  <thead>
-    <tr>
-      <th>Environment</th>
-      <th>Client ID</th>
-      <th>Account ID</th>
-      <th>Last Updated</th>
-      <th>Visibility</th>
-      <th>Status</th>
-      <th class="env-actions-col" style="width: 64px">Actions</th>
-    </tr>
-  </thead>
-`;
 
-const PU_TABLE_HEAD = `
-  <thead>
-    <tr>
-      <th>Username</th>
-      <th>Full Name</th>
-      <th>Email</th>
-      <th>Role</th>
-      <th>Last Login</th>
-      <th>Status</th>
-      <th>Must Change Pwd</th>
-      <th class="pu-actions-col" style="width: 64px">Actions</th>
-    </tr>
-  </thead>
-`;
 
-const CACHE_TABLE_HEAD = `
-  <thead>
-    <tr>
-      <th style="width: 42px"><input type="checkbox" id="cacheSelectAll" /></th>
-      <th>Key</th>
-      <th>Type</th>
-      <th>TTL</th>
-      <th>Size</th>
-      <th style="width: 120px">Actions</th>
-    </tr>
-  </thead>
-`;
-
-function envRowHtml(env: AdminEnvironment): string {
-  return (
-    "<tr>" +
-    "<td>" +
-    '<div class="env-name-cell">' +
-    "<strong>" +
-    escHtml(env.environment_name) +
-    "</strong>" +
-    '<div class="action-cell env-id-row">' +
-    '<code style="font-size: 11px; color: var(--text-muted);">' +
-    escHtml(env.id) +
-    "</code>" +
-    '<button class="icon-btn copy-id-btn" data-id="' +
-    env.id +
-    '" title="Copy ID">' +
-    '<i class="fa-solid fa-copy"></i>' +
-    "</button>" +
-    "</div>" +
-    "</div>" +
-    "</td>" +
-    "<td>" +
-    escHtml(env.client_id) +
-    "</td>" +
-    "<td>" +
-    (env.account_id
-      ? escHtml(env.account_id)
-      : '<span style="color:var(--text-muted)">—</span>') +
-    "</td>" +
-    "<td>" +
-    formatLocalDate(env.updated_at) +
-    "</td>" +
-    "<td>" +
-    envToggleHtml(env.id, "is_visible", env.is_visible) +
-    "</td>" +
-    "<td>" +
-    envToggleHtml(env.id, "is_active", env.is_active) +
-    "</td>" +
-    '<td class="env-actions-col">' +
-    '<button type="button" class="icon-btn row-menu-trigger" data-menu="env" data-id="' +
-    env.id +
-    '" data-name="' +
-    escHtml(env.environment_name) +
-    '" title="Actions">' +
-    '<i class="fa-solid fa-ellipsis-vertical"></i>' +
-    "</button>" +
-    "</td>" +
-    "</tr>"
-  );
-}
-
-function puRowHtml(u: PortalUser): string {
-  return (
-    "<tr>" +
-    "<td><strong>" +
-    escHtml(u.username) +
-    "</strong></td>" +
-    "<td>" +
-    (u.full_name ? escHtml(u.full_name) : '<span style="color:var(--text-muted)">—</span>') +
-    "</td>" +
-    '<td style="font-size:12.5px;">' +
-    (u.email ? escHtml(u.email) : '<span style="color:var(--text-muted)">—</span>') +
-    "</td>" +
-    "<td>" +
-    puRoleBadge(u.role) +
-    "</td>" +
-    '<td style="font-size:12px;color:var(--text-muted);">' +
-    puFmtDate(u.last_login_at) +
-    "</td>" +
-    "<td>" +
-    puStatusBadge(u.is_active) +
-    "</td>" +
-    "<td>" +
-    (u.must_change_password
-      ? '<span class="badge badge-warning"><i class="fa-solid fa-clock"></i> Pending</span>'
-      : '<span class="badge badge-success"><i class="fa-solid fa-check"></i> Set</span>') +
-    "</td>" +
-    '<td class="pu-actions-col">' +
-    '<button type="button" class="icon-btn row-menu-trigger" data-menu="pu" data-id="' +
-    u.id +
-    '" data-username="' +
-    escHtml(u.username) +
-    '" data-active="' +
-    u.is_active +
-    '" title="Actions">' +
-    '<i class="fa-solid fa-ellipsis-vertical"></i>' +
-    "</button>" +
-    "</td>" +
-    "</tr>"
-  );
-}
-
-function cacheRowHtml(entry: CacheEntry): string {
-  const encodedKey = encodeURIComponent(entry.key);
-  const typeBadge =
-    '<span class="badge" style="background: var(--bg-surface); color: var(--text-secondary); border: 1px solid var(--border)">' +
-    escHtml(entry.redis_type || "unknown") +
-    "</span>";
-
-  return (
-    "<tr>" +
-    `<td><input type="checkbox" class="cache-row-check" data-key="${encodedKey}" /></td>` +
-    `<td><span class="cache-key" title="${escHtml(entry.key)}">${escHtml(entry.key)}</span></td>` +
-    `<td>${typeBadge}</td>` +
-    `<td>${escHtml(entry.ttl_label || "Unavailable")}</td>` +
-    `<td>${formatBytes(entry.size_bytes)}</td>` +
-    "<td>" +
-    '<div class="cache-action-wrap">' +
-    `<button class="btn btn-ghost btn-sm cache-view-btn" data-key="${encodedKey}" title="View"><i class="fa-regular fa-eye"></i></button>` +
-    `<button class="btn btn-ghost btn-sm cache-delete-btn" data-key="${encodedKey}" title="Delete" style="color: var(--danger)"><i class="fa-regular fa-trash-can"></i></button>` +
-    "</div>" +
-    "</td>" +
-    "</tr>"
-  );
-}
-
-/** Restructures a freshly-initialized DataTables wrapper so only the table
- * itself scrolls horizontally — identical rearrangement in all three tables
- * (env / users / cache), ported from the EJS's repeated setTimeout blocks. */
-function restructureDataTableWrapper($: any, tableSelector: string, container: HTMLElement) {
-  const $wrapper = $(container).find(tableSelector).closest(".dataTables_wrapper");
-  const $table = $wrapper.find("table");
-  const $filter = $wrapper.find(".dataTables_filter");
-  const $length = $wrapper.find(".dataTables_length");
-  const $info = $wrapper.find(".dataTables_info");
-  const $paginate = $wrapper.find(".dataTables_paginate");
-
-  $table.detach();
-  $filter.detach();
-  $length.detach();
-  $info.detach();
-  $paginate.detach();
-
-  const $scrollContainer = $('<div style="overflow-x: auto; min-width: 0; flex: 1;"></div>');
-  $scrollContainer.append($table);
-
-  const $topControls = $(
-    '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;"></div>',
-  );
-  $topControls.append($length);
-  $topControls.append($filter);
-
-  const $bottomControls = $(
-    '<div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px; flex-wrap: wrap; gap: 12px;"></div>',
-  );
-  $bottomControls.append($info);
-  $bottomControls.append($paginate);
-
-  $wrapper.empty();
-  $wrapper.append($topControls);
-  $wrapper.append($scrollContainer);
-  $wrapper.append($bottomControls);
-
-  return { $wrapper, $filter, $length, $info, $paginate };
-}
 
 /* ── Copy-icon button — used by the several "copy URL" icons in modals ─── */
 function CopyIconButton({
@@ -628,21 +181,11 @@ export default function AdminDashboard() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [activePage, setActivePage] = useHashPage<PageId>(PAGE_IDS, "overview");
 
-  // Close any open row ⋯ menu when the user switches pages/sections.
-  useEffect(() => {
-    closeRowMenu();
-  }, [activePage]);
   const [refreshing, setRefreshing] = useState(false);
 
   /* ── Environments ─────────────────────────────────────────────────── */
   const [environments, setEnvironments] = useState<AdminEnvironment[]>([]);
   const [envLoaded, setEnvLoaded] = useState(false);
-  const envTableContainerRef = useRef<HTMLDivElement>(null);
-  const envDataTableRef = useRef<any>(null);
-  // Last-rendered environment list — lets the DataTables effect tell a
-  // Visibility/Status flip (in-place update) apart from real structural
-  // changes (add/edit/delete → full rebuild).
-  const prevEnvsRef = useRef<AdminEnvironment[] | null>(null);
 
   // API access scope drawer — opened from an environment row's shield
   // button, scoped to that one environment (see EnvironmentAccess.tsx).
@@ -687,203 +230,6 @@ export default function AdminDashboard() {
   };
 
   const recentEnvs = environments.slice(0, 5);
-
-  /* Environments table — imperative DataTables bridge (see PortalDashboard
-     for the rationale: DataTables restructures the DOM heavily, so we hand
-     it a container React never renders children into). */
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = envTableContainerRef.current;
-    if (!$ || !container || !envLoaded) return;
-
-    const prevEnvs = prevEnvsRef.current;
-    prevEnvsRef.current = environments;
-
-    // A Visibility/Status flip on the current row set is a one-cell change.
-    // Sync the switches in place instead of destroying/rebuilding the
-    // DataTable — a rebuild would flicker the whole table and reset the
-    // user's search/sort/page. Structural changes (add/edit/delete) fall
-    // through to the full rebuild below.
-    if (
-      envDataTableRef.current &&
-      prevEnvs &&
-      envsDifferOnlyByToggles(prevEnvs, environments)
-    ) {
-      environments.forEach((env) => {
-        (["is_visible", "is_active"] as const).forEach((field) => {
-          const input = container.querySelector<HTMLInputElement>(
-            `.env-toggle[data-id="${env.id}"][data-field="${field}"]`,
-          );
-          if (input) input.checked = !!env[field];
-        });
-      });
-      return;
-    }
-
-    if (envDataTableRef.current) {
-      envDataTableRef.current.destroy();
-      envDataTableRef.current = null;
-    }
-
-    const $container = $(container).empty();
-
-    if (environments.length === 0) {
-      $container.html(
-        `<table class="dt" id="envTable">${ENV_TABLE_HEAD}<tbody>` +
-          '<tr><td colspan="7">' +
-          '<div class="empty-state">' +
-          '<div class="empty-state-icon"><i class="fa-regular fa-folder-open"></i></div>' +
-          "<h3>No environments found</h3>" +
-          '<p>Click "Add Environment" to create the first one.</p>' +
-          "</div>" +
-          "</td></tr>" +
-          "</tbody></table>",
-      );
-      return;
-    }
-
-    const rowsHtml = environments.map(envRowHtml).join("");
-    $container.html(`<table class="dt" id="envTable">${ENV_TABLE_HEAD}<tbody>${rowsHtml}</tbody></table>`);
-
-    envDataTableRef.current = $container.find("#envTable").DataTable({
-      pageLength: 10,
-      lengthMenu: [5, 10, 25, 50],
-      order: [],
-      columnDefs: [
-        // Visibility/Status are now toggle switches, not sortable/searchable
-        // text — an orderable header on a checkbox column reorders nothing
-        // visible and just confuses. Columns: 0 Environment (name+ID),
-        // 1 Client ID, 2 Created, 3 Last Updated, 4 Visibility, 5 Status,
-        // 6 Actions.
-        { targets: [4, 5], orderable: false, searchable: false },
-        { targets: 6, orderable: false, searchable: false },
-      ],
-      language: {
-        emptyTable: "No environments found",
-        zeroRecords: "No matching environments",
-        lengthMenu: "Show _MENU_ rows",
-        search: "",
-        searchPlaceholder: "Search environments…",
-        info: "Showing _START_–_END_ of _TOTAL_",
-        paginate: { previous: "‹", next: "›" },
-      },
-    });
-
-    const layoutTimer = setTimeout(() => {
-      restructureDataTableWrapper($, "#envTable", container);
-    }, 10);
-
-    return () => clearTimeout(layoutTimer);
-  }, [environments, envLoaded]);
-
-  /* Delegated click handlers for the env table's action buttons. */
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = envTableContainerRef.current;
-    if (!$ || !container) return;
-
-    const onCopy = function (this: HTMLElement) {
-      const $btn = $(this);
-      const idValue = $btn.data("id");
-      if (!idValue) return;
-      copyToClipboard(String(idValue)).then(() => {
-        const $icon = $btn.find("i");
-        $icon.removeClass("fa-copy").addClass("fa-check");
-        $btn.addClass("copied");
-        setTimeout(() => {
-          $icon.removeClass("fa-check").addClass("fa-copy");
-          $btn.removeClass("copied");
-        }, 1500);
-      });
-    };
-    const onRowMenu = function (this: HTMLElement) {
-      const id = String($(this).data("id"));
-      const name = String($(this).data("name") || "");
-      if (this.classList.contains("row-menu-open")) {
-        closeRowMenu();
-        return;
-      }
-      openRowMenu(this, [
-        {
-          label: "API access scope",
-          icon: "fa-solid fa-shield-halved",
-          onClick: () => openAccessDrawer(id, name),
-        },
-        { label: "Edit", icon: "fa-solid fa-pen-to-square", onClick: () => openEditModal(id) },
-        {
-          label: "Duplicate",
-          icon: "fa-regular fa-clone",
-          onClick: () => openDuplicateModal(id),
-        },
-        {
-          label: "Delete",
-          icon: "fa-solid fa-trash",
-          danger: true,
-          onClick: () => confirmDeleteEnvironment(id, name),
-        },
-      ]);
-    };
-    const onToggle = function (this: HTMLInputElement) {
-      const field = $(this).data("field") as "is_active" | "is_visible";
-      handleEnvToggle(this, String($(this).data("id")), field);
-    };
-
-    $(container).on("click", ".copy-id-btn", onCopy);
-    $(container).on("click", ".row-menu-trigger", onRowMenu);
-    $(container).on("change", ".env-toggle", onToggle);
-    return () => {
-      $(container).off("click", ".copy-id-btn", onCopy);
-      $(container).off("click", ".row-menu-trigger", onRowMenu);
-      $(container).off("change", ".env-toggle", onToggle);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [environments]);
-
-  /* Delegated click handlers for the recent-envs (overview) copy/edit/dup
-     buttons — same JSX-rendered table, but action-cell buttons are wired
-     with a small ref-scoped delegation, matching the env table above. */
-  const recentEnvsRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = recentEnvsRef.current;
-    if (!$ || !container) return;
-
-    const onCopy = function (this: HTMLElement) {
-      const $btn = $(this);
-      const idValue = $btn.data("id");
-      if (!idValue) return;
-      copyToClipboard(String(idValue)).then(() => {
-        const $icon = $btn.find("i");
-        $icon.removeClass("fa-copy").addClass("fa-check");
-        $btn.addClass("copied");
-        setTimeout(() => {
-          $icon.removeClass("fa-check").addClass("fa-copy");
-          $btn.removeClass("copied");
-        }, 1500);
-      });
-    };
-    const onEdit = function (this: HTMLElement) {
-      openEditModal($(this).data("id"));
-    };
-    const onDup = function (this: HTMLElement) {
-      openDuplicateModal($(this).data("id"));
-    };
-    const onAccess = function (this: HTMLElement) {
-      openAccessDrawer(String($(this).data("id")), String($(this).data("name")));
-    };
-
-    $(container).on("click", ".copy-id-btn", onCopy);
-    $(container).on("click", ".access-btn", onAccess);
-    $(container).on("click", ".edit-btn", onEdit);
-    $(container).on("click", ".dup-btn", onDup);
-    return () => {
-      $(container).off("click", ".copy-id-btn", onCopy);
-      $(container).off("click", ".access-btn", onAccess);
-      $(container).off("click", ".edit-btn", onEdit);
-      $(container).off("click", ".dup-btn", onDup);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [environments]);
 
   /* ── Environment modal (add / edit / duplicate) ──────────────────────── */
   const [envModalOpen, setEnvModalOpen] = useState(false);
@@ -1035,46 +381,37 @@ export default function AdminDashboard() {
     }
   }
 
-  // Flips one switch (Visibility or Status) from the Environments list —
-  // optimistic, with no full table reload and no list re-fetch: the switch
-  // stays where the user put it, React state is updated so the rest of the
-  // dashboard (stats, recent list, edit modal) stays consistent, and the
-  // DataTables effect syncs that single cell in place. On failure the switch
-  // is rolled back.
-  async function handleEnvToggle(
-    checkboxEl: HTMLInputElement,
-    id: string,
-    field: "is_active" | "is_visible",
-  ) {
-    const next = checkboxEl.checked;
-    const wrap = checkboxEl.closest(".toggle-wrap") as HTMLElement | null;
-    checkboxEl.disabled = true;
-    // Show a small spinner on the switch while the status PATCH is in flight.
-    wrap?.classList.add("toggle-busy");
-
-    try {
-      await toggleEnvironmentStatus(id, { [field]: next });
-      setEnvironments((prev) =>
-        prev.map((env) => (env.id === id ? { ...env, [field]: next } : env)),
-      );
-      toast(
-        field === "is_active"
-          ? next
-            ? "Environment enabled"
-            : "Environment disabled"
-          : next
-            ? "Environment is now visible"
-            : "Environment is now hidden",
-        "success",
-      );
-    } catch (err: any) {
-      checkboxEl.checked = !next;
-      toast(err?.message || "Update failed", "error");
-    } finally {
-      checkboxEl.disabled = false;
-      wrap?.classList.remove("toggle-busy");
-    }
-  }
+  /* Flips one switch (Visibility or Status) from the Environments list.
+   *
+   * No list re-fetch: only this environment's field changed, so patching it
+   * into state keeps the rest of the dashboard (stats, recent list, edit
+   * modal) consistent without a round trip. <Toggle /> owns the in-flight
+   * spinner and reverts itself if this rejects, so the error is re-thrown
+   * rather than swallowed. */
+  const handleEnvToggle = useCallback(
+    async (env: AdminEnvironment, field: "is_active" | "is_visible", next: boolean) => {
+      try {
+        await toggleEnvironmentStatus(env.id, { [field]: next });
+        setEnvironments((prev) =>
+          prev.map((row) => (row.id === env.id ? { ...row, [field]: next } : row)),
+        );
+        toast(
+          field === "is_active"
+            ? next
+              ? "Environment enabled"
+              : "Environment disabled"
+            : next
+              ? "Environment is now visible"
+              : "Environment is now hidden",
+          "success",
+        );
+      } catch (err: any) {
+        toast(err?.message || "Update failed", "error");
+        throw err;
+      }
+    },
+    [],
+  );
 
   /* ── Redirect URL success modal ──────────────────────────────────────── */
   const [redirectModalOpen, setRedirectModalOpen] = useState(false);
@@ -1115,11 +452,9 @@ export default function AdminDashboard() {
 
   /* ── Portal users ─────────────────────────────────────────────────── */
   const [puUsers, setPuUsers] = useState<PortalUser[]>([]);
-  // Mirrors envLoaded for the environments table — the users DataTable is
-  // only painted after the first list fetch has resolved, so it never
-  // flashes the "No portal users found" empty state while loading.
+  // Mirrors envLoaded: the table shows its loading skeleton until the first
+  // fetch resolves, so it never flashes the "no portal users" empty state.
   const [puLoaded, setPuLoaded] = useState(false);
-  const puTableContainerRef = useRef<HTMLDivElement>(null);
 
   // Module-permission modal — opened from a user row's shield-icon button.
   const [permsUserId, setPermsUserId] = useState<string | null>(null);
@@ -1131,7 +466,6 @@ export default function AdminDashboard() {
     setPermsUsername(username);
     setPermsOpen(true);
   }
-  const puDataTableRef = useRef<any>(null);
 
   const loadPortalUsers = async () => {
     try {
@@ -1143,106 +477,6 @@ export default function AdminDashboard() {
       setPuLoaded(true);
     }
   };
-
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = puTableContainerRef.current;
-    // Don't paint anything (not even the "no users" empty state) until the
-    // first load has resolved — mirrors the env table's envLoaded gate so
-    // the page never flashes a false empty table while data is loading.
-    if (!$ || !container || !puLoaded) return;
-
-    if (puDataTableRef.current) {
-      puDataTableRef.current.destroy();
-      puDataTableRef.current = null;
-    }
-
-    const $container = $(container).empty();
-
-    if (!puUsers.length) {
-      $container.html(
-        `<table class="dt" id="puTable">${PU_TABLE_HEAD}<tbody>` +
-          '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text-muted);">' +
-          '<i class="fa-solid fa-users" style="font-size:24px;display:block;margin-bottom:10px;opacity:0.3;"></i>No portal users found.</td></tr>' +
-          "</tbody></table>",
-      );
-      return;
-    }
-
-    const rowsHtml = puUsers.map(puRowHtml).join("");
-    $container.html(`<table class="dt" id="puTable">${PU_TABLE_HEAD}<tbody>${rowsHtml}</tbody></table>`);
-
-    puDataTableRef.current = $container.find("#puTable").DataTable({
-      pageLength: 10,
-      order: [[0, "asc"]],
-      language: {
-        search: "",
-        searchPlaceholder: "Search users…",
-        lengthMenu: "Show _MENU_ rows",
-        info: "Showing _START_–_END_ of _TOTAL_",
-        paginate: { previous: "‹", next: "›" },
-      },
-      columnDefs: [{ targets: 7, orderable: false }],
-    });
-
-    const layoutTimer = setTimeout(() => {
-      restructureDataTableWrapper($, "#puTable", container);
-    }, 10);
-
-    return () => clearTimeout(layoutTimer);
-  }, [puUsers, puLoaded]);
-
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = puTableContainerRef.current;
-    if (!$ || !container) return;
-
-    const onRowMenu = function (this: HTMLElement) {
-      const id = String($(this).data("id"));
-      const username = String($(this).data("username") || "");
-      const active = $(this).data("active") === true || $(this).data("active") === "true";
-      if (this.classList.contains("row-menu-open")) {
-        closeRowMenu();
-        return;
-      }
-      openRowMenu(this, [
-        {
-          label: "Permissions",
-          icon: "fa-solid fa-user-shield",
-          onClick: () => openPortalUserPermissions(id, username),
-        },
-        { label: "Edit", icon: "fa-solid fa-pen-to-square", onClick: () => puOpenEdit(id) },
-        {
-          label: "Reset Password",
-          icon: "fa-solid fa-key",
-          onClick: () => puOpenReset(id, username),
-        },
-        {
-          label: "Manage Environments",
-          icon: "fa-solid fa-plug",
-          onClick: () => puOpenAssignEnv(id, username),
-        },
-        active
-          ? {
-              label: "Disable",
-              icon: "fa-solid fa-ban",
-              danger: true,
-              onClick: () => puToggleStatus(id, false),
-            }
-          : {
-              label: "Enable",
-              icon: "fa-solid fa-circle-check",
-              onClick: () => puToggleStatus(id, true),
-            },
-      ]);
-    };
-
-    $(container).on("click", ".row-menu-trigger", onRowMenu);
-    return () => {
-      $(container).off("click", ".row-menu-trigger", onRowMenu);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [puUsers]);
 
   /* ── Add portal user modal ───────────────────────────────────────── */
   const [puAddModalOpen, setPuAddModalOpen] = useState(false);
@@ -1499,9 +733,8 @@ export default function AdminDashboard() {
   const [cacheEntries, setCacheEntries] = useState<CacheEntry[]>([]);
   const [selectedCacheKeys, setSelectedCacheKeys] = useState<Set<string>>(new Set());
   const [cacheSearchPattern, setCacheSearchPattern] = useState("");
-  const cacheTableContainerRef = useRef<HTMLDivElement>(null);
-  const cacheDataTableRef = useRef<any>(null);
-  const cacheSearchDebounceRef = useRef<number | null>(null);
+  // Read by callbacks that must not re-create themselves on every keystroke
+  // (handleRefresh, the post-delete reload).
   const cacheSearchPatternRef = useRef(cacheSearchPattern);
   cacheSearchPatternRef.current = cacheSearchPattern;
 
@@ -1509,10 +742,6 @@ export default function AdminDashboard() {
     const normalizedPattern =
       typeof patternOverride === "string" ? patternOverride.trim() : cacheSearchPatternRef.current;
 
-    if (cacheSearchDebounceRef.current) {
-      clearTimeout(cacheSearchDebounceRef.current);
-      cacheSearchDebounceRef.current = null;
-    }
     setCacheSearchPattern(normalizedPattern);
 
     window.NProgress?.start();
@@ -1529,151 +758,13 @@ export default function AdminDashboard() {
     }
   };
 
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = cacheTableContainerRef.current;
-    if (!$ || !container) return;
-
-    if (cacheDataTableRef.current) {
-      cacheDataTableRef.current.destroy();
-      cacheDataTableRef.current = null;
-    }
-
-    const $container = $(container).empty();
-    const rowsHtml = cacheEntries.map(cacheRowHtml).join("");
-    $container.html(`<table class="dt" id="cacheTable">${CACHE_TABLE_HEAD}<tbody>${rowsHtml}</tbody></table>`);
-
-    cacheDataTableRef.current = $container.find("#cacheTable").DataTable({
-      pageLength: 10,
-      lengthMenu: [10, 25, 50, 100],
-      order: [],
-      columnDefs: [
-        { targets: 0, orderable: false, searchable: false },
-        { targets: 5, orderable: false, searchable: false },
-      ],
-      language: {
-        emptyTable: "No cache entries found",
-        zeroRecords: "No matching cache keys",
-        lengthMenu: "Show _MENU_ keys",
-        search: "",
-        searchPlaceholder: "Search cache keys…",
-        info: "Showing _START_–_END_ of _TOTAL_",
-        paginate: { previous: "‹", next: "›" },
-      },
-    });
-
-    const layoutTimer = setTimeout(() => {
-      const { $filter } = restructureDataTableWrapper($, "#cacheTable", container);
-      const $wrapper = $(container).find(".dataTables_wrapper");
-      $wrapper.find(".dataTables_length").css("display", "flex");
-      $filter.css("display", "flex");
-      $wrapper.find(".dataTables_info").css("display", "block");
-      $wrapper.find(".dataTables_paginate").css("display", "flex");
-
-      const $searchInput = $filter.find("input");
-      $searchInput.val(cacheSearchPatternRef.current);
-      $searchInput.attr("placeholder", "Search cache keys / patterns…");
-      $searchInput.attr("type", "search");
-      $searchInput.attr("name", "cache_key_search");
-      $searchInput.attr("autocomplete", "off");
-      $searchInput.attr("autocorrect", "off");
-      $searchInput.attr("autocapitalize", "off");
-      $searchInput.attr("spellcheck", "false");
-      $searchInput.attr("data-form-type", "other");
-      $searchInput.attr("data-lpignore", "true");
-      $searchInput.attr("data-1p-ignore", "true");
-      $searchInput.off(".DT");
-      $searchInput.off("input.cacheServerSearch");
-      $searchInput.on("input.cacheServerSearch", function (this: HTMLInputElement) {
-        const nextPattern = (this.value || "").trim();
-        if (cacheSearchDebounceRef.current) clearTimeout(cacheSearchDebounceRef.current);
-        cacheSearchDebounceRef.current = window.setTimeout(() => {
-          loadCacheEntries(nextPattern);
-        }, CACHE_SEARCH_DEBOUNCE_MS);
-      });
-    }, 10);
-
-    return () => clearTimeout(layoutTimer);
+  /* Stable identity so <CacheTable />'s debounce effect isn't torn down and
+     rebuilt on every parent render, which would restart the timer and mean
+     the query never fires while the user keeps typing. */
+  const handleCacheSearch = useCallback((pattern: string) => {
+    loadCacheEntries(pattern);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheEntries]);
-
-  /* Cache selection + row action delegation. */
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = cacheTableContainerRef.current;
-    if (!$ || !container) return;
-
-    const onSelectAll = function (this: HTMLInputElement) {
-      const checked = this.checked;
-      const next = new Set<string>();
-      $(container)
-        .find(".cache-row-check")
-        .each(function (this: HTMLInputElement) {
-          this.checked = checked;
-          if (checked) next.add(decodeURIComponent($(this).data("key")));
-        });
-      setSelectedCacheKeys(next);
-    };
-
-    const onRowCheck = function (this: HTMLInputElement) {
-      const key = decodeURIComponent($(this).data("key"));
-      setSelectedCacheKeys((prev) => {
-        const next = new Set(prev);
-        if (this.checked) next.add(key);
-        else next.delete(key);
-        return next;
-      });
-    };
-
-    const onView = async function (this: HTMLElement, e: any) {
-      e.preventDefault();
-      e.stopPropagation();
-      const key = decodeURIComponent($(this).data("key"));
-      await openCacheDetailModal(key);
-    };
-
-    const onDelete = async function (this: HTMLElement, e: any) {
-      e.preventDefault();
-      e.stopPropagation();
-      const key = decodeURIComponent($(this).data("key"));
-      try {
-        await deleteCacheKeyWithConfirm(key);
-      } catch (err: any) {
-        toast(err?.message || "Failed to delete cache key", "error");
-      }
-    };
-
-    $(container).on("change", "#cacheSelectAll", onSelectAll);
-    $(container).on("change", ".cache-row-check", onRowCheck);
-    $(container).on("click", ".cache-view-btn", onView);
-    $(container).on("click", ".cache-delete-btn", onDelete);
-    return () => {
-      $(container).off("change", "#cacheSelectAll", onSelectAll);
-      $(container).off("change", ".cache-row-check", onRowCheck);
-      $(container).off("click", ".cache-view-btn", onView);
-      $(container).off("click", ".cache-delete-btn", onDelete);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cacheEntries]);
-
-  /* Reflect selection state onto the (imperatively-rendered) checkboxes. */
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = cacheTableContainerRef.current;
-    if (!$ || !container) return;
-    const allCount = cacheEntries.length;
-    const selectedCount = selectedCacheKeys.size;
-    $(container)
-      .find(".cache-row-check")
-      .each(function (this: HTMLInputElement) {
-        const key = decodeURIComponent($(this).data("key"));
-        this.checked = selectedCacheKeys.has(key);
-      });
-    const $selectAll = $(container).find("#cacheSelectAll");
-    if ($selectAll.length) {
-      ($selectAll[0] as HTMLInputElement).checked = allCount > 0 && allCount === selectedCount;
-    }
-  }, [selectedCacheKeys, cacheEntries]);
+  }, []);
 
   async function deleteCacheKeyWithConfirm(key: string) {
     const Swal = window.Swal;
@@ -2024,7 +1115,7 @@ export default function AdminDashboard() {
                   View All &nbsp;<i className="fa-solid fa-arrow-right" />
                 </button>
               </div>
-              <div id="recentEnvsBody" ref={recentEnvsRef}>
+              <div id="recentEnvsBody">
                 {recentEnvs.length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-state-icon">
@@ -2051,30 +1142,42 @@ export default function AdminDashboard() {
                             <div className="env-name-cell">
                               <strong>{env.environment_name}</strong>
                               <div className="action-cell env-id-row">
-                                <code style={{ fontSize: 11, color: "var(--text-muted)" }}>{env.id}</code>
-                                <button className="icon-btn copy-id-btn" data-id={env.id} title="Copy ID">
-                                  <i className="fa-solid fa-copy" />
-                                </button>
+                                <code className="env-id-code">{env.id}</code>
+                                <CopyButton value={env.id} title="Copy ID" />
                               </div>
                             </div>
                           </td>
-                          <td dangerouslySetInnerHTML={{ __html: mask(env.client_id) }} />
-                          <td>{formatLocalDate(env.created_at)}</td>
-                          <td dangerouslySetInnerHTML={{ __html: badgeHtml(env.is_active) }} />
+                          <td>
+                            <MaskedValue value={env.client_id} />
+                          </td>
+                          <td>{formatDateTime(env.created_at)}</td>
+                          <td>
+                            <ActiveBadge active={env.is_active} />
+                          </td>
                           <td>
                             <div className="action-cell">
                               <button
-                                className="icon-btn access-btn"
-                                data-id={env.id}
-                                data-name={env.environment_name}
+                                type="button"
+                                className="icon-btn"
                                 title="API access scope"
+                                onClick={() => openAccessDrawer(env.id, env.environment_name)}
                               >
                                 <i className="fa-solid fa-shield-halved" />
                               </button>
-                              <button className="icon-btn edit-btn" data-id={env.id} title="Edit environment">
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                title="Edit environment"
+                                onClick={() => openEditModal(env.id)}
+                              >
                                 <i className="fa-solid fa-pen-to-square" />
                               </button>
-                              <button className="icon-btn dup-btn" data-id={env.id} title="Duplicate environment">
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                title="Duplicate environment"
+                                onClick={() => openDuplicateModal(env.id)}
+                              >
                                 <i className="fa-regular fa-clone" />
                               </button>
                             </div>
@@ -2103,10 +1206,16 @@ export default function AdminDashboard() {
 
             <div className="card">
               <div className="card-body">
-                <div id="alertContainer" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div className="table-wrapper" ref={envTableContainerRef} />
-                </div>
+                <EnvironmentsTable
+                  environments={environments}
+                  loading={!envLoaded}
+                  onAdd={openAddModal}
+                  onEdit={(env) => openEditModal(env.id)}
+                  onDuplicate={(env) => openDuplicateModal(env.id)}
+                  onDelete={(env) => confirmDeleteEnvironment(env.id, env.environment_name)}
+                  onOpenAccess={(env) => openAccessDrawer(env.id, env.environment_name)}
+                  onToggle={handleEnvToggle}
+                />
               </div>
             </div>
           </div>
@@ -2124,10 +1233,16 @@ export default function AdminDashboard() {
             </div>
             <div className="card">
               <div className="card-body">
-                <div id="alertContainer" />
-                <div style={{ overflowX: "auto" }}>
-                  <div className="table-wrapper" ref={puTableContainerRef} />
-                </div>
+                <PortalUsersTable
+                  users={puUsers}
+                  loading={!puLoaded}
+                  onAdd={openAddUserModal}
+                  onPermissions={(user) => openPortalUserPermissions(user.id, user.username)}
+                  onEdit={(user) => puOpenEdit(user.id)}
+                  onResetPassword={(user) => puOpenReset(user.id, user.username)}
+                  onMapEnvironment={(user) => puOpenAssignEnv(user.id, user.username)}
+                  onToggleStatus={(user, nextActive) => puToggleStatus(user.id, nextActive)}
+                />
               </div>
             </div>
           </div>
@@ -2170,7 +1285,19 @@ export default function AdminDashboard() {
 
             <div className="card">
               <div className="card-body">
-                <div className="table-wrapper" style={{ marginTop: 0 }} ref={cacheTableContainerRef} />
+                <CacheTable
+                  entries={cacheEntries}
+                  loading={false}
+                  selectedKeys={selectedCacheKeys}
+                  onSelectionChange={setSelectedCacheKeys}
+                  onView={openCacheDetailModal}
+                  onDelete={(key) => {
+                    deleteCacheKeyWithConfirm(key).catch((err: any) =>
+                      toast(err?.message || "Failed to delete cache key", "error"),
+                    );
+                  }}
+                  onSearch={handleCacheSearch}
+                />
               </div>
             </div>
           </div>
@@ -2524,95 +1651,231 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* ═══════════ PU: ASSIGN ENVIRONMENTS MODAL ═══════════ */}
+      {/* ═══════════ PU: MAP ENVIRONMENT MODAL ═══════════ */}
       <div className={`modal-backdrop${puAssignModalOpen ? " open" : ""}`}>
-        <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 480 }}>
+        <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 500 }}>
           <div className="modal-header">
             <div className="modal-title">
-              <i className="fa-solid fa-plug" /> Manage Environments: <span style={{ fontWeight: 500 }}>{puAssignUsername}</span>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 32,
+                  height: 32,
+                  borderRadius: "50%",
+                  background: "var(--accent-soft)",
+                  color: "var(--accent)",
+                  fontSize: 14,
+                  flex: "none",
+                }}
+              >
+                <i className="fa-solid fa-diagram-project" />
+              </span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                <span>Map Environment</span>
+                <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--text-muted)" }}>
+                  <i className="fa-solid fa-user" style={{ marginRight: 5 }} />
+                  {puAssignUsername}
+                </span>
+              </span>
             </div>
-            <button className="modal-close" onClick={() => setPuAssignModalOpen(false)}>
+            <button className="modal-close" onClick={() => setPuAssignModalOpen(false)} aria-label="Close">
               <i className="fa-solid fa-xmark" />
             </button>
           </div>
+
           <div className="modal-body" style={{ paddingBottom: 8 }}>
-            <div className="form-section-label">
-              <i className="fa-solid fa-link" /> Assigned Environments
+            {/* Mapped environments */}
+            <div className="form-section-label" style={{ marginBottom: 10 }}>
+              <i className="fa-solid fa-link" /> Mapped environments
+              <span
+                style={{
+                  marginLeft: 8,
+                  background: "var(--bg-surface-2)",
+                  color: "var(--text-secondary)",
+                  borderRadius: 999,
+                  padding: "1px 8px",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  lineHeight: "18px",
+                }}
+              >
+                {puAssignedEnvs === null ? "…" : puAssignedEnvs.length}
+              </span>
             </div>
-            <div style={{ minHeight: 40, marginBottom: 18 }}>
-              {puAssignLoadError ? (
-                <div style={{ color: "var(--danger)", fontSize: 13 }}>Failed to load environments.</div>
-              ) : puAssignedEnvs === null ? (
-                <div style={{ color: "var(--text-muted)", fontSize: 13 }}>Loading...</div>
-              ) : puAssignedEnvs.length === 0 ? (
-                <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>
-                  <i className="fa-solid fa-circle-info" style={{ marginRight: 5 }} /> No environments assigned yet.
-                </div>
-              ) : (
-                puAssignedEnvs.map((env) => (
+
+            {puAssignLoadError ? (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  background: "var(--danger-soft)",
+                  border: "1px solid rgba(239,68,68,0.2)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--danger)",
+                  fontSize: 13,
+                  marginBottom: 16,
+                }}
+              >
+                <i className="fa-solid fa-triangle-exclamation" style={{ marginRight: 6 }} />
+                Failed to load mapped environments. Please try again.
+              </div>
+            ) : puAssignedEnvs === null ? (
+              <div
+                style={{
+                  padding: "14px 0",
+                  color: "var(--text-muted)",
+                  fontSize: 13,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 16,
+                }}
+              >
+                <i className="fa-solid fa-spinner fa-spin" /> Loading mapped environments…
+              </div>
+            ) : puAssignedEnvs.length === 0 ? (
+              <div
+                style={{
+                  padding: "18px 14px",
+                  background: "var(--bg-surface)",
+                  border: "1px dashed var(--border)",
+                  borderRadius: "var(--radius-sm)",
+                  color: "var(--text-muted)",
+                  fontSize: 13,
+                  textAlign: "center",
+                  marginBottom: 16,
+                }}
+              >
+                <i
+                  className="fa-regular fa-folder-open"
+                  style={{ display: "block", fontSize: 18, marginBottom: 6, opacity: 0.5 }}
+                />
+                No environments mapped yet.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                {puAssignedEnvs.map((env) => (
                   <div
                     key={env.id}
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
-                      padding: "9px 12px",
-                      background: "var(--bg-surface)",
+                      gap: 10,
+                      padding: "8px 10px 8px 12px",
+                      background: "var(--bg-card)",
                       border: "1px solid var(--border)",
                       borderRadius: "var(--radius-sm)",
-                      marginBottom: 6,
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>
-                      <i className="fa-solid fa-circle-dot" style={{ color: "var(--success)", marginRight: 7, fontSize: 9 }} />
-                      {env.environment_name}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 26,
+                          height: 26,
+                          borderRadius: "50%",
+                          background: "var(--accent-soft)",
+                          color: "var(--accent)",
+                          fontSize: 11,
+                          flex: "none",
+                        }}
+                      >
+                        <i className="fa-solid fa-layer-group" />
+                      </span>
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: "var(--text-primary)",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {env.environment_name}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: "var(--text-muted)" }}>
+                          {env.account_id ? env.account_id : "No Wrike account"}
+                        </div>
+                      </div>
+                    </div>
                     <button
                       className="btn btn-ghost"
-                      style={{ height: 26, padding: "0 10px", fontSize: 12, color: "var(--danger)", borderColor: "rgba(239,68,68,0.3)" }}
+                      style={{
+                        height: 26,
+                        padding: "0 10px",
+                        fontSize: 12,
+                        color: "var(--danger)",
+                        borderColor: "rgba(239,68,68,0.3)",
+                        flex: "none",
+                      }}
                       onClick={() => puAssignId && puRevokeEnv(puAssignId, env.id)}
                     >
                       <i className="fa-solid fa-link-slash" /> Revoke
                     </button>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
 
+            {/* Map another environment */}
             <div>
-              <div className="form-section-label">
-                <i className="fa-solid fa-plus-circle" /> Assign New Environment
+              <div className="form-section-label" style={{ marginBottom: 10 }}>
+                <i className="fa-solid fa-plus-circle" /> Map another environment
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select
-                  className="form-control"
-                  style={{ flex: 1, display: puUnassignedEnvs.length ? "" : "none" }}
-                  value={puAssignSelectValue}
-                  onChange={(e) => setPuAssignSelectValue(e.target.value)}
+
+              {puUnassignedEnvs.length ? (
+                <div style={{ display: "flex", gap: 8 }}>
+                  <select
+                    className="form-control"
+                    style={{ flex: 1 }}
+                    value={puAssignSelectValue}
+                    onChange={(e) => setPuAssignSelectValue(e.target.value)}
+                  >
+                    <option value="">Select an environment…</option>
+                    {puUnassignedEnvs.map((env) => (
+                      <option key={env.id} value={env.id}>
+                        {env.environment_name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="btn btn-primary"
+                    style={{ height: 38, padding: "0 14px", flexShrink: 0 }}
+                    disabled={puAssignAdding || !puAssignSelectValue}
+                    onClick={handleAddEnvToUser}
+                  >
+                    {puAssignAdding ? (
+                      <i className="fa-solid fa-spinner fa-spin" />
+                    ) : (
+                      <i className="fa-solid fa-link" />
+                    )}
+                    Map
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    background: "var(--bg-surface)",
+                    border: "1px dashed var(--border)",
+                    borderRadius: "var(--radius-sm)",
+                    color: "var(--text-muted)",
+                    fontSize: 13,
+                    textAlign: "center",
+                  }}
                 >
-                  <option value="">Select environment…</option>
-                  {puUnassignedEnvs.map((env) => (
-                    <option key={env.id} value={env.id}>
-                      {env.environment_name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="btn btn-primary"
-                  style={{ height: 38, padding: "0 14px", flexShrink: 0 }}
-                  disabled={!puUnassignedEnvs.length || puAssignAdding}
-                  onClick={handleAddEnvToUser}
-                >
-                  <i className="fa-solid fa-link" /> Assign
-                </button>
-              </div>
-              {!puUnassignedEnvs.length && (
-                <div style={{ fontSize: 12.5, color: "var(--text-muted)", padding: "8px 0" }}>
-                  <i className="fa-solid fa-circle-info" /> No unassigned environments available.
+                  <i className="fa-solid fa-circle-info" /> No more environments available to map.
                 </div>
               )}
             </div>
           </div>
+
           <div className="modal-footer">
             <button className="btn btn-ghost" onClick={() => setPuAssignModalOpen(false)}>
               Done

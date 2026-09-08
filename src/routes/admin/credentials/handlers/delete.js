@@ -14,6 +14,8 @@ export const Delete = ({ id }) => {
       if (!credential)
         return reject({ statusCode: 404, message: "Credential not found" });
 
+      // Drops this environment's cached access scope as part of the delete,
+      // so nothing is left behind for an id that no longer exists.
       await WrikeCredentials.Delete(id);
       await syncWrikeCredentialsFromDB();
 

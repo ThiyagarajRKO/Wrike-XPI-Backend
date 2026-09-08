@@ -1,10 +1,6 @@
 import { verifyAdminJWT } from "../../../middlewares/adminAuth";
 import { EnvironmentAccess } from "../../../controllers";
-import {
-  clientIp,
-  evaluateAccess,
-  invalidateEnvironment,
-} from "../../../utils/environmentAccess";
+import { clientIp, evaluateAccess } from "../../../utils/environmentAccess";
 
 import {
   CreateRuleSchema,
@@ -19,9 +15,10 @@ import {
  * surface over the allow list the request-path gate reads
  * (src/utils/environmentAccess.js).
  *
- * Every write invalidates that environment's cached rule index before
- * replying, so a change takes effect on the very next API/MCP call rather
- * than up to a TTL later.
+ * Every write drops that environment's cached access scope before replying,
+ * so a change takes effect on the very next API/MCP call rather than up to a
+ * TTL later. That happens inside the controller (src/controllers/
+ * environmentAccess.js), not here, so a new route cannot forget it.
  */
 export const adminEnvironmentAccessRoute = (fastify, opts, done) => {
   const guard = { preHandler: [verifyAdminJWT] };
@@ -61,7 +58,6 @@ export const adminEnvironmentAccessRoute = (fastify, opts, done) => {
   fastify.post("/rules", { ...CreateRuleSchema, ...guard }, async (req, reply) => {
     try {
       const rule = await EnvironmentAccess.CreateRule(req.adminUser.id, req.body);
-      await invalidateEnvironment(rule.env_id);
 
       return reply.code(201).send({
         success: true,
@@ -76,7 +72,6 @@ export const adminEnvironmentAccessRoute = (fastify, opts, done) => {
   fastify.put("/rules/:id", { ...UpdateRuleSchema, ...guard }, async (req, reply) => {
     try {
       const rule = await EnvironmentAccess.UpdateRule(req.adminUser.id, req.params.id, req.body);
-      await invalidateEnvironment(rule.env_id);
 
       return ok(reply, rule, "Allow-list entry updated.");
     } catch (err) {
@@ -86,8 +81,7 @@ export const adminEnvironmentAccessRoute = (fastify, opts, done) => {
 
   fastify.delete("/rules/:id", { ...IdParamSchema, ...guard }, async (req, reply) => {
     try {
-      const { env_id } = await EnvironmentAccess.DeleteRule(req.adminUser.id, req.params.id);
-      await invalidateEnvironment(env_id);
+      await EnvironmentAccess.DeleteRule(req.adminUser.id, req.params.id);
 
       return ok(reply, null, "Allow-list entry removed.");
     } catch (err) {

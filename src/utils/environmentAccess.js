@@ -1,10 +1,23 @@
-import crypto from "crypto";
 import ipaddr from "ipaddr.js";
 import redisClient from "./redis";
 import { EnvironmentAccess, WrikeCredentials } from "../controllers";
 import { getUserData } from "./wrike";
+import {
+  IDENTITY_TTL,
+  RULES_TTL,
+  cached,
+  fingerprint,
+  identityKey,
+  invalidateEnvironment,
+  memoryGet,
+  memorySet,
+  rulesKey,
+  switchesKey,
+} from "./environmentAccessCache";
 
-require("dotenv").config();
+// Re-exported so existing importers keep working; the cache module is the
+// owner, and the controllers invalidate through it directly.
+export { invalidateEnvironment };
 
 /**
  * Environment-level API access scope, evaluated immediately after token
@@ -27,69 +40,12 @@ require("dotenv").config();
  *   L2  Redis, shared across instances — survives a restart, warms new pods
  *   L3  Postgres / the Wrike API — only on a genuine miss
  *
- * Admin writes invalidate L1+L2 for the affected environment synchronously,
- * so a rule change is live on the very next request.
+ * The cache itself, and every invalidation of it, lives in
+ * ./environmentAccessCache. Admin writes drop it from the controller that
+ * performs the write, so a rule or switch change is live on the very next
+ * request rather than up to a TTL later.
  */
 
-/* ── Configuration ─────────────────────────────────────────────────────── */
-
-const seconds = (name, fallback) => {
-  const parsed = parseInt(process.env[name], 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-};
-
-const RULES_TTL = seconds("ENV_ACCESS_RULES_TTL", 300); // 5 min
-const IDENTITY_TTL = seconds("ENV_ACCESS_IDENTITY_TTL", 300); // 5 min
-const L1_TTL_MS = seconds("ENV_ACCESS_MEMORY_TTL", 30) * 1000; // 30 s
-
-/* ── L1: in-process cache ──────────────────────────────────────────────── */
-
-const memory = new Map();
-
-const memoryGet = (key) => {
-  const hit = memory.get(key);
-  if (!hit) return undefined;
-  if (hit.expiresAt <= Date.now()) {
-    memory.delete(key);
-    return undefined;
-  }
-  return hit.value;
-};
-
-const memorySet = (key, value, ttlMs = L1_TTL_MS) => {
-  memory.set(key, { value, expiresAt: Date.now() + ttlMs });
-};
-
-/**
- * Read through L1 → L2 → loader, writing back to both on the way out. Redis
- * being down is not an error here: redisClient already degrades to null, so
- * the request falls through to the loader and still succeeds.
- */
-const cached = async (key, ttlSeconds, loader) => {
-  const local = memoryGet(key);
-  if (local !== undefined) return local;
-
-  const remote = await redisClient.get(key);
-  if (remote !== null && remote !== undefined) {
-    memorySet(key, remote);
-    return remote;
-  }
-
-  const fresh = await loader();
-  memorySet(key, fresh);
-  redisClient.set(key, fresh, ttlSeconds).catch(() => {});
-
-  return fresh;
-};
-
-const rulesKey = (envId) => `xpi:envaccess:rules:${envId}`;
-const switchesKey = (envId) => `xpi:envaccess:switches:${envId}`;
-const identityKey = (fingerprint) => `xpi:envaccess:identity:${fingerprint}`;
-
-// The token is never stored — only an opaque digest of it, so a cache dump
-// can't be replayed against Wrike.
-const fingerprint = (token) =>
-  crypto.createHash("sha256").update(String(token)).digest("hex").slice(0, 32);
 
 /* ── Loaders ───────────────────────────────────────────────────────────── */
 
@@ -164,16 +120,6 @@ const loadIdentity = async (wrikeToken) => {
     }
     throw err;
   }
-};
-
-/* ── Invalidation ──────────────────────────────────────────────────────── */
-
-/** Drop the cached rule index and switch state for one environment, L1 and L2. */
-export const invalidateEnvironment = async (envId) => {
-  if (!envId) return;
-  const keys = [rulesKey(envId), switchesKey(envId)];
-  keys.forEach((key) => memory.delete(key));
-  await redisClient.delMany(keys).catch(() => {});
 };
 
 /* ── Matching ──────────────────────────────────────────────────────────── */

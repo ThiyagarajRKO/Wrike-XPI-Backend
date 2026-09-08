@@ -1,10 +1,16 @@
 import models from "../../models";
 import ipaddr from "ipaddr.js";
+import { invalidateEnvironment } from "../utils/environmentAccessCache";
 
 /**
  * Environment-level API access scope — the storage side. Policy evaluation
- * (does a given caller match) lives in src/utils/environmentAccess.js; this
- * file is CRUD only.
+ * (does a given caller match) lives in src/utils/environmentAccess.js.
+ *
+ * Every write here (an email, domain or IP entry added, edited, enabled,
+ * disabled or removed) drops that environment's cached access scope before
+ * returning, so the change is enforced on the very next API or MCP call.
+ * Invalidating here rather than in the route handlers means a new write path
+ * cannot forget to do it.
  */
 
 const RULE_ATTRS = [
@@ -119,6 +125,8 @@ export const CreateRule = async (profileId, data) => {
     { profile_id: profileId },
   );
 
+  await invalidateEnvironment(rule.env_id);
+
   return rule.get({ plain: true });
 };
 
@@ -132,7 +140,14 @@ export const UpdateRule = async (profileId, id, data) => {
     validateRuleValue(rule.rule_type, data.value);
   }
 
+  // Captured before the update: if a future caller is ever allowed to move a
+  // rule between environments, BOTH sides need their cache dropped.
+  const previousEnvId = rule.env_id;
+
   await rule.update(data, { profile_id: profileId });
+
+  await invalidateEnvironment(previousEnvId);
+  if (rule.env_id !== previousEnvId) await invalidateEnvironment(rule.env_id);
 
   return rule.get({ plain: true });
 };
@@ -145,6 +160,8 @@ export const DeleteRule = async (profileId, id) => {
 
   const envId = rule.env_id;
   await rule.destroy({ profile_id: profileId });
+
+  await invalidateEnvironment(envId);
 
   return { env_id: envId };
 };
