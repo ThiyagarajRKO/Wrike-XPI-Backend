@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   APPLIES_TO_OPTIONS,
   appliesToLabel,
@@ -21,6 +22,10 @@ import { confirmDanger, escHtml, toast } from "../lib/notify";
 import "./EnvironmentAccess.css";
 
 type TabId = "allowlist" | "check";
+
+/** Rows per page in the allow list. Small enough that the drawer never grows
+    a second scrollbar of its own on a laptop screen. */
+const PAGE_SIZE = 10;
 
 const TYPE_ICON: Record<RuleType, string> = {
   email: "fa-user",
@@ -80,6 +85,147 @@ function SurfacePicker({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * One labelled row of filter chips. Generic over the value so each group
+ * keeps its own union type rather than degrading to string, which is what
+ * stops a "Status" chip being handed to the type filter by mistake.
+ */
+function FilterGroup<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+  onClear,
+}: {
+  label: string;
+  value: T;
+  onChange: (next: T) => void;
+  options: { value: T; label: string }[];
+  /** First option's value doubles as "all"/unset — pass it to enable the
+      group's own individual clear button, shown only once it is active. */
+  onClear?: () => void;
+}) {
+  const isAll = value === options[0]?.value;
+  return (
+    <div className="ea-filter-group">
+      <div className="ea-filter-group-head">
+        <span className="ea-filter-label">{label}</span>
+        {onClear && !isAll && (
+          <button type="button" className="ea-filter-group-clear" onClick={onClear}>
+            Clear
+          </button>
+        )}
+      </div>
+      <div className="ea-filter-chips" role="group" aria-label={label}>
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={value === option.value}
+            className={`ea-filter-chip${value === option.value ? " active" : ""}`}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The funnel button + its popover panel. Anchored inline in the toolbar
+ * (not a portal): the toolbar does not scroll independently of the popover,
+ * so a simple absolutely-positioned panel is enough, unlike the per-row
+ * RowMenu which does need a portal to escape a scrolling table.
+ */
+function FilterPopover({
+  count,
+  onClearAll,
+  children,
+}: {
+  /** Number of active (non-default) filters, shown as a badge on the button. */
+  count: number;
+  onClearAll: () => void;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // Capture phase, and stopped here: without this, the same Escape
+      // keystroke would also reach the drawer's own Escape handler and close
+      // the whole drawer behind the popover in one press.
+      e.stopPropagation();
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [open]);
+
+  return (
+    <div className="ea-filter-pop-root" ref={rootRef}>
+      <button
+        type="button"
+        className={`ea-filter-trigger${count > 0 ? " active" : ""}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title="Filter the allow list"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <i className="fa-solid fa-filter" aria-hidden="true" />
+        <span className="ea-sr-only">
+          Filter{count > 0 ? ` (${count} active)` : ""}
+        </span>
+        {count > 0 && <span className="ea-filter-trigger-badge">{count}</span>}
+      </button>
+
+      {open && (
+        <div className="ea-filter-pop" role="dialog" aria-label="Filter the allow list">
+          <div className="ea-filter-pop-header">
+            <span>Filters</span>
+            <button
+              type="button"
+              className="ea-filter-pop-close"
+              aria-label="Close filters"
+              onClick={() => setOpen(false)}
+            >
+              <i className="fa-solid fa-xmark" aria-hidden="true" />
+            </button>
+          </div>
+
+          <div className="ea-filter-pop-body">{children}</div>
+
+          <div className="ea-filter-pop-footer">
+            <button
+              type="button"
+              className="ea-filter-pop-clear-all"
+              disabled={count === 0}
+              onClick={onClearAll}
+            >
+              <i className="fa-solid fa-arrow-rotate-left" aria-hidden="true" />
+              &nbsp;Clear all
+            </button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => setOpen(false)}>
+              Done
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -165,8 +311,23 @@ export default function EnvironmentAccess({
   const [tab, setTab] = useState<TabId>("allowlist");
 
   const [rules, setRules] = useState<AccessRule[]>([]);
-  const [loading, setLoading] = useState(false);
+  /* Starts true, and the fetch is kicked off by an effect that runs after the
+     first paint. Without this the drawer renders one frame with an empty list
+     and no request in flight, which flashes the "nobody can call this
+     environment" empty state at an admin whose list is not actually empty. */
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  const [typeFilter, setTypeFilter] = useState<RuleType | "all">("all");
+  const [scopeFilter, setScopeFilter] = useState<AppliesTo | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "on" | "off">("all");
+  const [page, setPage] = useState(1);
+
+  // Any change to what is being filtered starts again from the first page,
+  // otherwise narrowing a list while on page 4 lands on an empty view.
+  useEffect(() => {
+    setPage(1);
+  }, [search, typeFilter, scopeFilter, statusFilter]);
 
   const [addOpen, setAddOpen] = useState(false);
   const [addType, setAddType] = useState<RuleType>("email");
@@ -202,7 +363,10 @@ export default function EnvironmentAccess({
   const [checkBusy, setCheckBusy] = useState(false);
 
   const load = useCallback(async () => {
-    if (!envId) return;
+    if (!envId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       setRules(await listRules(envId));
@@ -221,6 +385,13 @@ export default function EnvironmentAccess({
       setCheckResult(null);
       setCheckEmail("");
       setCheckIp("");
+      // Reopening on a different environment should not inherit the last
+      // one's filters, which would hide entries that are actually there.
+      setSearch("");
+      setTypeFilter("all");
+      setScopeFilter("all");
+      setStatusFilter("all");
+      setPage(1);
     }
   }, [open, envId, load]);
 
@@ -234,13 +405,49 @@ export default function EnvironmentAccess({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  /* Search plus the three filter dimensions the table actually shows, so what
+     an admin can narrow by is exactly what they can see in a column. */
   const filteredRules = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    if (!needle) return rules;
-    return rules.filter(
-      (r) => r.value.includes(needle) || (r.label || "").toLowerCase().includes(needle),
-    );
-  }, [rules, search]);
+    return rules.filter((r) => {
+      if (typeFilter !== "all" && r.rule_type !== typeFilter) return false;
+      if (scopeFilter !== "all" && r.applies_to !== scopeFilter) return false;
+      if (statusFilter === "on" && !r.is_enabled) return false;
+      if (statusFilter === "off" && r.is_enabled) return false;
+      if (!needle) return true;
+      return (
+        r.value.toLowerCase().includes(needle) ||
+        (r.label || "").toLowerCase().includes(needle)
+      );
+    });
+  }, [rules, search, typeFilter, scopeFilter, statusFilter]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredRules.length / PAGE_SIZE));
+  // Clamped during render rather than corrected from an effect: deleting the
+  // last entry on the last page would otherwise paint an empty page for a
+  // frame before the effect pulled it back.
+  const safePage = Math.min(page, pageCount);
+
+  const pagedRules = useMemo(
+    () => filteredRules.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredRules, safePage],
+  );
+
+  // How many of the three popover filters are set away from "all" — the
+  // badge on the funnel button. Search has its own visible box and is not
+  // counted here, so the badge reflects only what is hidden inside the popup.
+  const activeFilterCount =
+    (typeFilter !== "all" ? 1 : 0) +
+    (scopeFilter !== "all" ? 1 : 0) +
+    (statusFilter !== "all" ? 1 : 0);
+
+  const clearFilters = () => {
+    setTypeFilter("all");
+    setScopeFilter("all");
+    setStatusFilter("all");
+    setSearch("");
+    setPage(1);
+  };
 
   const enabledCount = rules.filter((r) => r.is_enabled).length;
 
@@ -475,6 +682,45 @@ export default function EnvironmentAccess({
                     onChange={(e) => setSearch(e.target.value)}
                   />
                 </div>
+
+                <FilterPopover count={activeFilterCount} onClearAll={clearFilters}>
+                  <FilterGroup
+                    label="Type"
+                    value={typeFilter}
+                    onChange={setTypeFilter}
+                    onClear={() => setTypeFilter("all")}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "email", label: "Email" },
+                      { value: "domain", label: "Domain" },
+                      { value: "ip", label: "IP" },
+                    ]}
+                  />
+                  <FilterGroup
+                    label="Applies to"
+                    value={scopeFilter}
+                    onChange={setScopeFilter}
+                    onClear={() => setScopeFilter("all")}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "both", label: "API + MCP" },
+                      { value: "api", label: "API" },
+                      { value: "mcp", label: "MCP" },
+                    ]}
+                  />
+                  <FilterGroup
+                    label="Status"
+                    value={statusFilter}
+                    onChange={setStatusFilter}
+                    onClear={() => setStatusFilter("all")}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "on", label: "On" },
+                      { value: "off", label: "Off" },
+                    ]}
+                  />
+                </FilterPopover>
+
                 <button type="button" className="btn btn-primary btn-sm" onClick={openAdd}>
                   <i className="fa-solid fa-plus" aria-hidden="true" />
                   &nbsp;Add entry
@@ -496,17 +742,38 @@ export default function EnvironmentAccess({
                       </tr>
                     </thead>
                     <tbody>
+                      {/* Skeleton mirrors the real row shape (icon + two
+                          lines, then a chip per column) so the table does not
+                          visibly reflow when the data lands. */}
                       {loading &&
-                        Array.from({ length: 4 }).map((_, i) => (
+                        Array.from({ length: 5 }).map((_, i) => (
                           <tr className="ea-skeleton-row" key={i}>
-                            <td colSpan={5}>
-                              <div className="ea-skeleton" />
+                            <td>
+                              <div className="ea-skeleton-identity">
+                                <div className="ea-skeleton ea-skeleton-avatar" />
+                                <div className="ea-skeleton-lines">
+                                  <div className="ea-skeleton" style={{ width: `${58 + (i % 3) * 12}%` }} />
+                                  <div className="ea-skeleton ea-skeleton-sub" style={{ width: "34%" }} />
+                                </div>
+                              </div>
+                            </td>
+                            <td>
+                              <div className="ea-skeleton ea-skeleton-chip" />
+                            </td>
+                            <td>
+                              <div className="ea-skeleton ea-skeleton-seg" />
+                            </td>
+                            <td>
+                              <div className="ea-skeleton ea-skeleton-switch" />
+                            </td>
+                            <td className="ea-col-actions">
+                              <div className="ea-skeleton ea-skeleton-btn" />
                             </td>
                           </tr>
                         ))}
 
                       {!loading &&
-                        filteredRules.map((rule, index) => (
+                        pagedRules.map((rule, index) => (
                           <tr
                             key={rule.id}
                             className="ea-row-in"
@@ -595,8 +862,52 @@ export default function EnvironmentAccess({
                     <div className="ea-empty-icon" aria-hidden="true">
                       <i className="fa-solid fa-magnifying-glass" />
                     </div>
-                    <div className="ea-empty-title">Nothing matches that search</div>
-                    <div className="ea-empty-desc">No entry contains “{search}”.</div>
+                    <div className="ea-empty-title">Nothing matches</div>
+                    <div className="ea-empty-desc">
+                      No entry matches the filters you have set. Try clearing them to see all{" "}
+                      {rules.length} entries.
+                    </div>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={clearFilters}>
+                      <i className="fa-solid fa-xmark" aria-hidden="true" />
+                      &nbsp;Clear filters
+                    </button>
+                  </div>
+                )}
+
+                {!loading && filteredRules.length > 0 && (
+                  <div className="ea-pager">
+                    <div className="ea-pager-count">
+                      Showing {(safePage - 1) * PAGE_SIZE + 1} to{" "}
+                      {Math.min(safePage * PAGE_SIZE, filteredRules.length)} of{" "}
+                      {filteredRules.length}
+                      {filteredRules.length !== rules.length && (
+                        <span className="ea-pager-total"> (filtered from {rules.length})</span>
+                      )}
+                    </div>
+
+                    {pageCount > 1 && (
+                      <div className="ea-pager-nav">
+                        <button
+                          type="button"
+                          onClick={() => setPage(safePage - 1)}
+                          disabled={safePage <= 1}
+                          aria-label="Previous page"
+                        >
+                          <i className="fa-solid fa-chevron-left" aria-hidden="true" />
+                        </button>
+                        <span className="ea-pager-status">
+                          Page {safePage} of {pageCount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPage(safePage + 1)}
+                          disabled={safePage >= pageCount}
+                          aria-label="Next page"
+                        >
+                          <i className="fa-solid fa-chevron-right" aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

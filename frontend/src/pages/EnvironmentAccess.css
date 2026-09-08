@@ -27,8 +27,11 @@
   opacity: 1;
 }
 
+/* Wider than it was: the allow list now carries a type badge, a three-way
+   Applies-to control and a switch alongside the value, which needs the room
+   to stay on one line. */
 .ea-drawer {
-  width: min(680px, 100vw);
+  width: min(880px, 100vw);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -285,10 +288,16 @@
 .ea-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 14px;
+}
+
+/* Search and Filter stay grouped on the left at any width; Add entry pins
+   to the right instead of space-between spreading a 3rd item into the
+   middle of the bar. */
+.ea-toolbar > .btn-primary {
+  margin-left: auto;
 }
 
 .ea-search {
@@ -429,6 +438,309 @@
   color: var(--text-secondary);
 }
 
+/* ── Filter popover ─────────────────────────────────────────────────────
+   A funnel button in the toolbar rather than a permanent chip bar: it keeps
+   the toolbar to one line at any width, and the badge on the button still
+   tells you at a glance that something is filtered without the panel open. */
+
+.ea-filter-pop-root {
+  position: relative;
+}
+
+/* Icon-only: a square button matching the other icon buttons in this
+   toolbar's row (.ea-icon-btn), not the wider label+icon pill it was. */
+.ea-filter-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ea-filter-trigger:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.ea-filter-trigger.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* Overlaid on the icon's corner rather than sitting inline, since there is
+   no label text left for it to sit beside. A true circle, not a pill: width
+   and height are equal, and border-radius:50% (999px on a non-square box
+   rounds into an oval, which is what "not rounded" was seeing). The count
+   is always a single digit (Type / Applies to / Status — 3 filters, max),
+   so a fixed 18px square with no horizontal padding is always enough room. */
+.ea-filter-trigger-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+  color: #fff;
+  background: var(--accent);
+  border: 2px solid var(--bg-card);
+  border-radius: 50%;
+}
+
+/* Visually hidden, but present for assistive tech: the button's only visible
+   content is the funnel icon once the label is gone. */
+.ea-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ea-filter-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: eaFilterPopIn 0.15s ease-out both;
+}
+
+@keyframes eaFilterPopIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ea-filter-pop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+
+.ea-filter-pop-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.ea-filter-pop-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.ea-filter-pop-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+}
+
+.ea-filter-pop-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.ea-filter-pop-clear-all {
+  padding: 6px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ea-filter-pop-clear-all:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.ea-filter-pop-clear-all:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* One filter dimension inside the popover: label row + its own chips. */
+.ea-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ea-filter-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ea-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.ea-filter-group-clear {
+  padding: 0;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.ea-filter-group-clear:hover {
+  text-decoration: underline;
+}
+
+.ea-filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ea-filter-chip {
+  padding: 5px 11px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ea-filter-chip:hover:not(.active) {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.ea-filter-chip.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.ea-filter-chip:focus-visible,
+.ea-filter-trigger:focus-visible,
+.ea-filter-pop-close:focus-visible,
+.ea-filter-group-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Pagination ─────────────────────────────────────────────────────── */
+
+.ea-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.ea-pager-count {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.ea-pager-total {
+  color: var(--text-muted);
+}
+
+.ea-pager-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ea-pager-nav button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.ea-pager-nav button:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.ea-pager-nav button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ea-pager-status {
+  padding: 0 8px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 /* ── Applies-to picker (API / MCP / both) ───────────────────────────────
    A segmented control rather than a dropdown: with three options it takes
    the same room as a select, and the whole column stays readable at a glance
@@ -543,6 +855,57 @@
     var(--bg-surface) 100%
   );
   background-size: 200% 100%;
+}
+
+/* Placeholder shapes matching the real cells, so the table does not jump
+   when the data arrives. */
+.ea-skeleton-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ea-skeleton-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.ea-skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ea-skeleton-sub {
+  height: 9px;
+}
+
+.ea-skeleton-chip {
+  width: 52px;
+  height: 16px;
+  border-radius: 999px;
+}
+
+.ea-skeleton-seg {
+  width: 120px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+}
+
+.ea-skeleton-switch {
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+}
+
+.ea-skeleton-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
 }
 
 .ea-empty {

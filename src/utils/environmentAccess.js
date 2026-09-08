@@ -193,8 +193,32 @@ const matchRule = (rule, { email, ip, surface }) => {
   return false;
 };
 
-const SURFACE_LABEL = { api: "REST API", mcp: "MCP" };
+const SURFACE_LABEL = { api: "API", mcp: "MCP" };
 const surfaceLabel = (surface) => SURFACE_LABEL[surface] || surface;
+
+/* ── Plain-language explanations ────────────────────────────────────────
+   These strings are read by admins in the console, most of whom are not
+   developers. They say who was checked, what happened, and what to do about
+   it. No jargon ("rule", "match", "entry count"), no counts of internal
+   objects, and nothing that only makes sense if you have read this file. */
+
+/** "someone@acme.com", or a description of what we do know, for a caller. */
+const describeCaller = (email, ip) => {
+  if (email && ip) return `${email} (connecting from ${ip})`;
+  if (email) return email;
+  if (ip) return `the computer at ${ip}`;
+  return "this caller";
+};
+
+/** Capitalise a fragment being used to open a sentence. */
+const opening = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/** "a, b and c" — an actual sentence, not a run of repeated clauses. */
+const list = (items) => {
+  const parts = items.filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "";
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+};
 
 /* ── The evaluation ────────────────────────────────────────────────────── */
 
@@ -230,12 +254,18 @@ export const evaluateAccess = async ({
     return {
       allowed: false,
       code: "ENVIRONMENT_UNKNOWN",
-      message: "This token is not bound to an environment, so access rules cannot be applied.",
+      message: "This login is not linked to an environment, so its allow list cannot be checked.",
       email: knownEmail || null,
       ip: ip || null,
       surface,
       matchedRule: null,
-      checks: [gate("fail", "Token has no environment")],
+      checks: [
+        gate(
+          "fail",
+          "This login is not linked to any environment, so there is no allow list to check it " +
+            "against. Someone will need to reconnect it to an environment.",
+        ),
+      ],
     };
   }
 
@@ -249,12 +279,21 @@ export const evaluateAccess = async ({
       return {
         allowed: false,
         code: "IDENTITY_UNAVAILABLE",
-        message: "Could not verify who this token belongs to. Please retry.",
+        message: "We could not confirm who is calling, so the request was refused.",
         email: null,
         ip: ip || null,
         surface,
         matchedRule: null,
-        checks: [gate("fail", err?.message || "Wrike profile lookup failed")],
+        checks: [
+          gate(
+            "fail",
+            "Wrike did not tell us which person this login belongs to, so there was no email " +
+              "address to check against the allow list. This is usually temporary. If it keeps " +
+              `happening, the connection to Wrike may need to be renewed. (${
+                err?.message || "no response from Wrike"
+              })`,
+          ),
+        ],
       };
     }
   }
@@ -265,7 +304,7 @@ export const evaluateAccess = async ({
     return {
       allowed: true,
       code: "ALLOWED_GATE_DISABLED",
-      message: "The allow-list check is switched off for this environment.",
+      message: "The allow list is switched off for this environment, so everyone is let through.",
       email: email || null,
       ip: ip || null,
       surface,
@@ -273,7 +312,8 @@ export const evaluateAccess = async ({
       checks: [
         gate(
           "pass",
-          "Email/domain/IP allow-list check is disabled for this environment — every caller passes this gate.",
+          "The allow list is switched off for this environment, so nothing is being checked and " +
+            "anyone with a valid login can get in. Switch it back on to start enforcing the list.",
         ),
       ],
     };
@@ -285,29 +325,61 @@ export const evaluateAccess = async ({
   const matched = inScope.find((rule) => matchRule(rule, { email, ip, surface }));
 
   if (!matched) {
-    const identityLine = email
-      ? `${email} (domain @${domainOf(email)})`
-      : "no identity resolved";
+    const caller = describeCaller(email, ip);
 
     // Would this caller have been let in on the OTHER surface? If so the
-    // entry exists and is simply scoped elsewhere, which is a configuration
-    // mistake worth naming precisely instead of reporting a flat "no match"
-    // that sends the admin hunting for an entry that is already there.
+    // entry already exists and is simply pointed at the wrong place, which is
+    // a far more useful thing to say than "not on the list" and saves the
+    // admin hunting for an entry that is sitting right in front of them.
     const otherSurfaceMatch = rules.find(
-      (rule) => !appliesToSurface(rule, surface) && matchRule({ ...rule, applies_to: "both" }, { email, ip, surface }),
+      (rule) =>
+        !appliesToSurface(rule, surface) &&
+        matchRule({ ...rule, applies_to: "both" }, { email, ip, surface }),
     );
 
-    const scopeNote = otherSurfaceMatch
-      ? `. An entry for ${otherSurfaceMatch.value} exists but is scoped to ` +
-        `${surfaceLabel(otherSurfaceMatch.applies_to)} only`
-      : "";
+    if (otherSurfaceMatch) {
+      const listed =
+        otherSurfaceMatch.rule_type === "domain"
+          ? `Anyone at ${otherSurfaceMatch.value}`
+          : otherSurfaceMatch.value;
+
+      return {
+        allowed: false,
+        code: "NOT_ALLOWED_ON_SURFACE",
+        message: `${opening(caller)} is on the allow list, but it is set to ${surfaceLabel(
+          otherSurfaceMatch.applies_to,
+        )} only, and this was ${surfaceLabel(surface)}.`,
+        email: email || null,
+        ip: ip || null,
+        surface,
+        matchedRule: null,
+        checks: [
+          gate(
+            "fail",
+            `${listed} is already on the allow list, but set to work with ` +
+              `${surfaceLabel(otherSurfaceMatch.applies_to)} only. This request came in through ` +
+              `${surfaceLabel(surface)}, so it was refused. To let it through, change that ` +
+              `entry's "Applies to" setting to ${surfaceLabel(surface)} or to API + MCP.`,
+          ),
+        ],
+      };
+    }
+
+    // Nothing on the list at all is a different situation from "there is a
+    // list and you are not on it", and the fix is different too.
+    const emptyList = inScope.length === 0;
+    const suggestion = email
+      ? `Add ${email}, or allow everyone at ${domainOf(email)}.`
+      : ip
+        ? `Add ${ip} to the allow list.`
+        : "Add an email address, a domain, or an IP address to the allow list.";
 
     return {
       allowed: false,
-      code: otherSurfaceMatch ? "NOT_ALLOWED_ON_SURFACE" : "NOT_ALLOWED",
-      message: otherSurfaceMatch
-        ? `This caller is not allowed on the ${surfaceLabel(surface)} for this environment.`
-        : "This caller does not match any active allow-list entry for this environment.",
+      code: "NOT_ALLOWED",
+      message: emptyList
+        ? "Nobody has been added to the allow list yet, so every caller is being refused."
+        : `${opening(caller)} is not on the allow list for this environment.`,
       email: email || null,
       ip: ip || null,
       surface,
@@ -315,22 +387,36 @@ export const evaluateAccess = async ({
       checks: [
         gate(
           "fail",
-          `Checked ${identityLine}${ip ? ` from ${ip}` : ""} against ${inScope.length} active ` +
-            `entr${inScope.length === 1 ? "y" : "ies"} for the ${surfaceLabel(surface)} — none matched${scopeNote}`,
+          emptyList
+            ? `The allow list for ${surfaceLabel(surface)} is empty, so nobody can get in, ` +
+              `including ${caller}. ${suggestion}`
+            : `Nothing on the allow list covers this caller. We looked for ` +
+              `${list([
+                email,
+                email ? `anyone at ${domainOf(email)}` : null,
+                ip ? `the address ${ip}` : null,
+              ])}, and found none of them. ${suggestion}`,
         ),
       ],
     };
   }
 
-  const scopeSuffix =
+  const because =
+    matched.rule_type === "email"
+      ? `${matched.value} is on the allow list`
+      : matched.rule_type === "domain"
+        ? `everyone at ${matched.value} is on the allow list`
+        : `the IP address ${matched.value} is on the allow list`;
+
+  const scopeNote =
     matched.applies_to === "both"
-      ? " (API and MCP)"
-      : ` (${surfaceLabel(matched.applies_to)} only)`;
+      ? "That entry covers both API and MCP."
+      : `That entry is set to ${surfaceLabel(matched.applies_to)} only, which is how this request came in.`;
 
   return {
     allowed: true,
     code: "ALLOWED",
-    message: "Authorized.",
+    message: "Allowed.",
     email: email || null,
     ip: ip || null,
     surface,
@@ -338,11 +424,7 @@ export const evaluateAccess = async ({
     checks: [
       gate(
         "pass",
-        (matched.rule_type === "email"
-          ? `Matched email rule ${matched.value}`
-          : matched.rule_type === "domain"
-            ? `Matched domain rule @${matched.value}`
-            : `Matched IP rule ${matched.value}`) + scopeSuffix,
+        `${opening(describeCaller(email, ip))} is allowed because ${because}. ${scopeNote}`,
       ),
     ],
   };
