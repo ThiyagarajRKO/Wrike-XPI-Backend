@@ -108,6 +108,16 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      allowlist_check_enabled: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+        comment: "Gate 1 master switch — email/domain/IP allow list (src/utils/environmentAccess.js)",
+      },
+      custom_field_check_enabled: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: "Gate 2 master switch — Wrike Xtend API custom field. Flag only; enforcement is phase 2.",
+      },
       created_at: {
         type: DataTypes.DATE,
       },

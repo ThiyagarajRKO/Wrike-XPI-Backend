@@ -1,0 +1,389 @@
+/* Activity Log page.
+   Tokens, radii, shadows and type come from AdminDashboard.css; the table
+   shell (card/scroll/skeleton/empty state) is reused from EnvironmentAccess.css
+   (both are part of the same bundled admin page). Everything specific to
+   this page — the retention pill, filter bar, allow/deny signal, and the
+   result badge — is defined here, under an `al-` prefix.
+
+   Mood: same enterprise-quiet register as the rest of the shell (Wrike
+   green, Inter, light). The one departure this page earns: a persistent
+   left-edge colour bar per row, because an audit log's whole job is "was
+   this allowed" and that answer should be legible without reading a cell. */
+
+.al-retention {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.al-retention i {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.al-stats {
+  margin-bottom: 18px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FILTER BAR
+   One considered strip, not three loose selects: a search box
+   with the primary signal (who), an environment select (where),
+   and two chip groups (what kind, what happened) — grouped so
+   the eye reads it as one control surface.
+   ═══════════════════════════════════════════════════════════ */
+
+.al-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.al-search {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.al-search i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.al-search input {
+  width: 100%;
+  padding: 9px 12px 9px 33px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.al-search input:focus {
+  outline: none;
+  background: var(--bg-card);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.al-env-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 170px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  transition: border-color 0.15s ease;
+}
+
+.al-env-select:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.al-env-select > i:first-child {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.al-env-select select {
+  flex: 1;
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 9px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.al-env-select select:focus {
+  outline: none;
+}
+
+.al-select-caret {
+  font-size: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+/* Chip groups — a bordered pill holding buttons, one lit at a time. Same
+   language as the permission popup's "Quick set" switch, so a returning
+   admin already knows how to read it. */
+.al-chipgroup {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.al-chip {
+  padding: 6px 11px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.al-chip:hover {
+  background: var(--bg-card);
+}
+
+.al-chip[aria-pressed="true"] {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.al-chip-success[aria-pressed="true"] {
+  background: var(--success);
+}
+
+.al-chip-danger[aria-pressed="true"] {
+  background: var(--danger);
+}
+
+.al-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABLE
+   ═══════════════════════════════════════════════════════════ */
+
+.al-table th,
+.al-table td {
+  white-space: nowrap;
+}
+
+/* The allow/deny signal, read down the left edge of the whole table before
+   any cell is read individually — the one thing every row in an audit log
+   has to answer, made visible without a glance at the Result column. */
+.al-table tbody tr {
+  border-left: 3px solid transparent;
+}
+
+.al-table tbody tr.al-row-allowed {
+  border-left-color: var(--success);
+}
+
+.al-table tbody tr.al-row-denied {
+  border-left-color: var(--danger);
+}
+
+.al-time {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.al-caller {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.al-unresolved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--warning);
+}
+
+.al-unresolved i {
+  font-size: 10px;
+}
+
+.al-surface-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.al-surface-mcp {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.al-called {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+}
+
+.al-called code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  white-space: nowrap;
+}
+
+.al-method {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Result — an icon chip, not just a text badge, so allowed/denied reads as a
+   shape as well as a colour (never colour alone as the only signal). */
+.al-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.al-result-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+}
+
+.al-result-allow {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.al-result-deny {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.al-result-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.al-status {
+  margin-left: 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Pagination ─────────────────────────────────────────────────────── */
+
+.al-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.al-pagination-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOTION — App shell track: a staggered entrance when a page
+   of rows loads, same 0.18s/40ms timing as the allow-list and
+   permission tables elsewhere in this console.
+   ═══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .al-table tbody tr.al-row-in {
+    animation: alRowIn 0.18s ease-out both;
+    animation-delay: calc(var(--row-index, 0) * 40ms);
+  }
+
+  @keyframes alRowIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@media (max-width: 780px) {
+  .al-filterbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .al-search,
+  .al-env-select {
+    max-width: none;
+    width: 100%;
+  }
+
+  .al-chipgroup {
+    justify-content: space-between;
+  }
+
+  .al-called code {
+    max-width: 160px;
+  }
+}

@@ -20,6 +20,11 @@ export interface AdminEnvironment {
   campaign_space_id: string;
   is_active: boolean;
   is_visible: boolean;
+  /** Gate 1 master switch — email/domain/IP allow list. */
+  allowlist_check_enabled: boolean;
+  /** Gate 2 master switch — Wrike Xtend API custom field. Flag only for now;
+      enforcement is a later phase (see src/utils/environmentAccess.js). */
+  custom_field_check_enabled: boolean;
   created_at?: string;
   updated_at?: string;
   owner_id?: string | null;
@@ -69,6 +74,8 @@ export const listEnvironments = async (): Promise<AdminEnvironment[]> => {
       campaign_space_id: c.campaign_space_id || "",
       is_active: !!c.is_active,
       is_visible: !!c.is_visible,
+      allowlist_check_enabled: c.allowlist_check_enabled !== false,
+      custom_field_check_enabled: !!c.custom_field_check_enabled,
       created_at: c.created_at,
       updated_at: c.updated_at,
       owner_id: c.owner_id,
@@ -107,6 +114,30 @@ export const updateEnvironment = async (
     throw new Error(json?.message || "Save failed");
   }
   return json?.data;
+};
+
+/** Flips is_active and/or is_visible only — the list row's own switches.
+    Deliberately not routed through updateEnvironment(): that PUT requires the
+    whole credential form (client_id, every Datahub id, ...); a row toggle
+    has none of that. */
+export const toggleEnvironmentStatus = async (
+  id: string,
+  payload: {
+    is_active?: boolean;
+    is_visible?: boolean;
+    allowlist_check_enabled?: boolean;
+    custom_field_check_enabled?: boolean;
+  },
+): Promise<void> => {
+  const res = await adminFetch(`/api/v1/admin/credentials/${id}/status`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const json = await parseJson(res);
+  if (!res.ok || json?.success === false) {
+    throw new Error(json?.message || "Update failed");
+  }
 };
 
 export const deleteEnvironment = async (id: string): Promise<void> => {

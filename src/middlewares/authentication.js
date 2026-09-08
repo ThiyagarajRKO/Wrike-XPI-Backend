@@ -2,6 +2,7 @@ import { Tokens } from "../controllers";
 import { getWrikeTokens } from "../utils/wrike";
 import * as crypto from "../utils/crypto";
 import jwt from "jsonwebtoken";
+import { evaluateAccess, clientIp, isEnforced } from "../utils/environmentAccess";
 
 // Verify Basic Auth credentials and return unwrapped DEK
 const verifyBasicAuth = async (credentials) => {
@@ -153,9 +154,45 @@ export const ValidateToken = async (req, reply, fastify) => {
       );
     }
 
-    // Store token for route handlers
-    req.wrikeToken = accessToken;
+    // Environment-level access scope — evaluated immediately after the token
+    // itself is proven valid. Who is calling (email, from the same token)
+    // and where from (request IP) must match an entry on this environment's
+    // allow list, or the request goes no further. See
+    // src/utils/environmentAccess.js for the match rules.
+    const access = await evaluateAccess({
+      envId: token.env_id,
+      wrikeToken: accessToken,
+      ip: clientIp(req),
+    });
+
+    // Set before either branch below returns/continues, so the activity-log
+    // onResponse hook (src/routes/index.js) sees these on every outcome —
+    // allowed, denied, or audit-mode pass-through alike.
+    req.access = access;
     req.environmentName = token.environment_name;
+    req.envId = token.env_id;
+    req.callerEmail = access.email || null;
+
+    if (!access.allowed && isEnforced()) {
+      return reply.code(403).send({
+        success: false,
+        message: access.message,
+        error: { code: access.code, checks: access.checks },
+      });
+    }
+
+    if (!access.allowed) {
+      // Audit mode (ENVIRONMENT_ACCESS_ENABLED=false): log the refusal that
+      // would have happened and let the call through, so an allow list can
+      // be built from real traffic before it's switched on.
+      req.log?.warn?.(
+        { code: access.code, email: access.email, ip: access.ip },
+        "[env-access] would deny (enforcement disabled)",
+      );
+    }
+
+    // Store the decrypted token for route handlers.
+    req.wrikeToken = accessToken;
   } catch (err) {
     console.error(new Date().toISOString(), err);
     reply.code(401).send({
@@ -195,6 +232,9 @@ const resolveAuth = async (token, dek) => {
   return {
     wrikeToken: accessToken,
     environmentName: token.environment_name,
+    // Carried so the MCP layer can scope the environment access check to the
+    // same environment the token belongs to (src/plugins/mcp.js).
+    envId: token.env_id,
   };
 };
 

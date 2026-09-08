@@ -22,11 +22,19 @@ import {
   syncWrikeCredentialsFromDB,
   getCachedVisibleWrikeCredentials,
 } from "./utils/wrikeCredentials";
+import { startRetentionSweep } from "./utils/activityLog";
 
 (async () => {
   // Configure the framework and instantiate it
   const fastify = Fastify({
     logger: true,
+    // Required for req.ip (used by the environment IP allow list, see
+    // src/utils/environmentAccess.js) to reflect the real caller instead of
+    // the reverse proxy in front of this app — without it every request
+    // looks like it came from the proxy. Only safe when nothing except that
+    // proxy can reach this process directly; set TRUST_PROXY=false to
+    // disable if that's not true of this deployment.
+    trustProxy: process.env.TRUST_PROXY !== "false",
   });
 
   // app.use(express.static("public"));
@@ -103,6 +111,11 @@ import {
       err.message,
     );
   }
+
+  // Activity log retention — starts a background sweep so the log table
+  // never grows unbounded. Idempotent; safe even if something elsewhere
+  // imports src/utils/activityLog.js first.
+  startRetentionSweep();
 
   fastify.get("/api/v1/sync-secrets", async (req, res) => {
     try {

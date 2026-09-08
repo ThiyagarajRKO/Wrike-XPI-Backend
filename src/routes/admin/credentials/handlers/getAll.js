@@ -25,6 +25,8 @@ export const GetAll = () => {
         owner_id: cred.owner_id || null,
         is_active: cred.is_active,
         is_visible: cred.is_visible,
+        allowlist_check_enabled: cred.allowlist_check_enabled,
+        custom_field_check_enabled: cred.custom_field_check_enabled,
         created_at: cred.created_at,
         updated_at: cred.updated_at,
       }));

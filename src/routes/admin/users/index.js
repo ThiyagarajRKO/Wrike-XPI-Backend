@@ -1,5 +1,6 @@
 import { verifyAdminJWT } from "../../../middlewares/adminAuth";
-import { PortalAuth } from "../../../controllers";
+import { PortalAuth, PortalPermissions } from "../../../controllers";
+import { catalog } from "../../../utils/portalPermissionCatalog";
 
 import { ListUsers } from "../../portal/users/handlers/listUsers";
 import { CreateUser } from "../../portal/users/handlers/createUser";
@@ -114,6 +115,46 @@ export const adminPortalUsersRoute = (fastify, opts, done) => {
       }
     },
   );
+
+  // GET /admin/portal-users/permissions/catalog — the module vocabulary,
+  // fetched once by the console rather than duplicated in the frontend.
+  fastify.get("/permissions/catalog", guard, async (req, reply) => {
+    return reply.code(200).send({ success: true, data: catalog() });
+  });
+
+  // GET /admin/portal-users/:id/permissions
+  fastify.get("/:id/permissions", guard, async (req, reply) => {
+    try {
+      const data = await PortalPermissions.GetMatrix(req.params.id);
+      return reply.code(200).send({ success: true, data });
+    } catch (err) {
+      return reply.code(err?.statusCode || 400).send({
+        success: false,
+        message: err?.message || err,
+      });
+    }
+  });
+
+  // PUT /admin/portal-users/:id/permissions — replaces the whole matrix
+  fastify.put("/:id/permissions", guard, async (req, reply) => {
+    try {
+      const data = await PortalPermissions.SetMatrix(
+        req.adminUser.id,
+        req.params.id,
+        req.body?.permissions,
+      );
+      return reply.code(200).send({
+        success: true,
+        message: "Permissions updated.",
+        data,
+      });
+    } catch (err) {
+      return reply.code(err?.statusCode || 400).send({
+        success: false,
+        message: err?.message || err,
+      });
+    }
+  });
 
   // GET /admin/portal-users/:id/environments
   fastify.get("/:id/environments", guard, async (req, reply) => {

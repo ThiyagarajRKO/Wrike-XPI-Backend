@@ -132,6 +132,29 @@ export const GetById = async (id) => {
   }
 };
 
+// The two API-access security switches only — used by the request-path
+// gate (src/utils/environmentAccess.js), which must never touch a model
+// directly and reads nothing else about the environment.
+export const GetSwitches = async (id) => {
+  try {
+    if (!id) return null;
+
+    const credential = await models.WrikeCredentials.findOne({
+      attributes: ["allowlist_check_enabled", "custom_field_check_enabled"],
+      where: { id },
+    });
+
+    if (!credential) return null;
+
+    return {
+      allowlistCheckEnabled: credential.allowlist_check_enabled !== false,
+      customFieldCheckEnabled: !!credential.custom_field_check_enabled,
+    };
+  } catch (err) {
+    throw err;
+  }
+};
+
 // Get all credentials regardless of status (for admin listing)
 export const GetAllWithDeleted = async () => {
   try {

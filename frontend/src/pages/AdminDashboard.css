@@ -893,6 +893,229 @@
         background: rgba(255, 255, 255, 0.02);
       }
 
+      /* Environment name cell — the ID lives here now (below the name)
+         instead of its own column, so the table carries one fewer column
+         while the ID (with its copy button) stays one click away. */
+      .env-name-cell {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+        white-space: nowrap;
+      }
+      .env-id-row {
+        gap: 4px;
+      }
+      .env-id-row .icon-btn {
+        width: 22px;
+        height: 22px;
+      }
+
+      /* Actions column stays put while the rest of a wide table scrolls
+         horizontally underneath it — the scrolling ancestor is the
+         overflow-x:auto div restructureDataTableWrapper() wraps the table
+         in, so position:sticky resolves against that, not the viewport. */
+      .env-actions-col {
+        position: sticky;
+        right: 0;
+        z-index: 2;
+        box-shadow: -8px 0 8px -8px rgba(15, 23, 42, 0.12);
+      }
+      th.env-actions-col {
+        background: var(--bg-surface);
+      }
+      td.env-actions-col {
+        background: var(--bg-card);
+      }
+      /* Fixed Actions columns stay neutral on row hover — the sticky cells
+         keep their resting background instead of flashing the hover tint
+         (the rest of the row still highlights normally). */
+      table.dt tbody tr:hover td.env-actions-col,
+      table.dt tbody tr:hover td.pu-actions-col {
+        background: var(--bg-card);
+      }
+      /* Environments-table action icons are deliberately FLAT — no button
+         chrome and no box/border, not even on hover (the base .icon-btn
+         paints a bordered box on hover; that boxed look is wrong for a
+         dense row of icon actions). A slightly larger hit area plus a
+         bigger glyph keeps the row's primary controls easy to aim at and
+         easy to read. */
+      .env-actions-col .icon-btn {
+        width: 30px;
+        height: 30px;
+        min-width: 30px;
+        font-size: 16px;
+        border: none;
+      }
+      .env-actions-col .icon-btn:hover {
+        border-color: transparent;
+      }
+
+      /* Portal Users table — action buttons sized & styled like the env
+         table's flat 30x30 action icons so both management tables read the
+         same. Buttons carry pu-perms/pu-edit/pu-reset/pu-assign/pu-toggle. */
+      #puTable tbody .icon-btn {
+        width: 30px;
+        height: 30px;
+        min-width: 30px;
+        font-size: 16px;
+        border: none;
+      }
+      #puTable tbody .icon-btn:hover {
+        border-color: transparent;
+      }
+
+      /* Portal Users Actions column — fixed (sticky) exactly like the
+         Environments one, so the ⋯ actions stay visible while the table
+         scrolls sideways. */
+      .pu-actions-col {
+        position: sticky;
+        right: 0;
+        z-index: 2;
+        box-shadow: -8px 0 8px -8px rgba(15, 23, 42, 0.12);
+      }
+      th.pu-actions-col {
+        background: var(--bg-surface);
+      }
+      td.pu-actions-col {
+        background: var(--bg-card);
+      }
+
+      td.env-actions-col,
+      td.pu-actions-col {
+        text-align: center;
+      }
+
+      /* The row-menu trigger shows as "pressed" while its menu is open. */
+      .icon-btn.row-menu-open {
+        background: var(--bg-surface);
+        color: var(--accent);
+      }
+
+      /* ─── Row ⋯ menu (floating Actions dropdown) ─────────────────────── */
+      .row-menu {
+        position: fixed;
+        z-index: 3001;
+        min-width: 200px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        padding: 6px;
+        display: flex;
+        flex-direction: column;
+      }
+      .row-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+        padding: 8px 12px;
+        border: none;
+        background: transparent;
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+        text-align: left;
+        white-space: nowrap;
+      }
+      .row-menu-item i {
+        width: 16px;
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 13px;
+        flex: none;
+      }
+      .row-menu-item:hover {
+        background: var(--bg-surface);
+      }
+      .row-menu-item:hover i {
+        color: var(--accent);
+      }
+      .row-menu-item.danger {
+        color: var(--danger);
+      }
+      .row-menu-item.danger i {
+        color: var(--danger);
+      }
+      .row-menu-item.danger:hover {
+        background: rgba(239, 68, 68, 0.08);
+      }
+
+      /* Environments-table Visibility/Status switches — a compact variant of
+         the full-size .toggle-wrap control (which stays as-is in the edit
+         modal / access drawer), sized to sit neatly in a table cell. The knob
+         is 16px so the control reads at the same icon scale as the 16px
+         flat action icons in the same row.
+
+         The compound selector is deliberate: rows emit
+         class="toggle-wrap toggle-wrap-sm", so a plain .toggle-wrap-sm (0,1,0)
+         would LOSE the width/height race to the base .toggle-wrap rule, which
+         is declared later in this file with equal specificity.
+         .toggle-wrap.toggle-wrap-sm (0,2,0) wins it outright.
+
+         Geometry (box-sizing: border-box): 36x20 wrapper; the 1px borders on
+         .toggle-track leave a 34x18 inner area, so the 14px knob needs
+         top:2px ((18-14)/2) to be dead-centre, and from its base left:2px the
+         checked knob travels innerWidth(34)-knob(14)-2px insets = 18px →
+         translateX(16px). vertical-align:middle keeps the whole control
+         centred in the cell rather than resting on the text baseline. */
+      .toggle-wrap.toggle-wrap-sm {
+        width: 36px;
+        height: 20px;
+        vertical-align: middle;
+      }
+      .toggle-wrap-sm .toggle-track::before {
+        width: 14px;
+        height: 14px;
+        top: 2px;
+      }
+      /* The base rule .toggle-wrap input:checked + .toggle-track::before
+         (translateX(18px)) is declared later with the SAME specificity as a
+         plain .toggle-wrap-sm ... version, so it wins the cascade. The extra
+         .toggle-wrap bumps this to (0,4,0) so the compact 16px travel wins. */
+      .toggle-wrap.toggle-wrap-sm input:checked + .toggle-track::before {
+        transform: translateX(16px);
+      }
+
+      /* Pending-state feedback while a Visibility/Status toggle's PATCH is
+         in flight: dim the knob and show a tiny spinner at the pill's centre
+         so the click gives instant, localised feedback instead of a silent
+         wait (there is no full-table refresh anymore). */
+      .toggle-wrap.toggle-busy {
+        cursor: progress;
+      }
+      .toggle-wrap.toggle-busy input {
+        pointer-events: none;
+      }
+      .toggle-wrap.toggle-busy .toggle-track {
+        opacity: 0.8;
+      }
+      .toggle-wrap.toggle-busy .toggle-track::before {
+        opacity: 0.35;
+      }
+      .toggle-wrap.toggle-busy .toggle-track::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 10px;
+        height: 10px;
+        margin: -5px 0 0 -5px;
+        border: 2px solid rgba(255, 255, 255, 0.55);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: toggle-busy-spin 0.7s linear infinite;
+        pointer-events: none;
+      }
+      @keyframes toggle-busy-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       /* Ensure table scrolls only horizontally for wide content */
       .dataTables_wrapper .dataTables_scroll {
         max-width: 100%;
@@ -1433,6 +1656,11 @@
       }
 
       .toggle-wrap {
+        /* A <label> is inline by default, so width/height are ignored unless
+           a flex/grid ancestor forces it to a block box — true in the modal,
+           false in a plain table <td>, which is why the switch collapsed to
+           a dot there. inline-block makes it size correctly everywhere. */
+        display: inline-block;
         position: relative;
         width: 40px;
         height: 22px;

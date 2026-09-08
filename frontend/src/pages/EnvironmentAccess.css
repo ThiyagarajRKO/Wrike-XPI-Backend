@@ -1,0 +1,763 @@
+/* Environment API Access Scope drawer.
+   Tokens, radii, shadows and type all come from AdminDashboard.css; nothing
+   new is defined here. Every class is `ea-` prefixed so it can never collide
+   with the shell it opens over. */
+
+/* ═══════════════════════════════════════════════════════════
+   DRAWER SHELL
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(2px);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s ease;
+}
+
+.ea-scrim.open {
+  visibility: visible;
+  opacity: 1;
+}
+
+.ea-drawer {
+  width: min(680px, 100vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-body);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.16);
+  transform: translateX(16px);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Settles to `none` rather than translateX(0): a non-none transform would
+   make this a containing block for the position:fixed "Add entry" modal
+   rendered inside it, sizing it to the drawer instead of the viewport. */
+.ea-scrim.open .ea-drawer {
+  transform: none;
+}
+
+.ea-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ea-head-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ea-head-icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ea-head-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ea-head-env {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ea-close {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.ea-close:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.ea-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ea-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.ea-drawer .modal-backdrop {
+  z-index: 300;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BANNERS / EXPLAINER
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-audit-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 16px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-md);
+  background: var(--warning-soft);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.ea-audit-banner i {
+  color: var(--warning);
+  font-size: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.ea-audit-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ea-audit-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+/* States what "match-any" means, once, plainly — the feature's entire logic
+   in one sentence rather than left to be inferred from the table. */
+.ea-explainer {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid rgba(0, 130, 98, 0.2);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.ea-explainer i {
+  color: var(--accent);
+  font-size: 13px;
+  margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.ea-explainer strong {
+  color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SECURITY SWITCHES
+   The two gates in this environment, stated as controls rather
+   than left implicit. Sits between the explainer and the tabs —
+   before the admin gets to the allow-list detail, they see
+   whether the gate is even switched on.
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-switches {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.ea-switch-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.ea-switch-info {
+  min-width: 0;
+}
+
+.ea-switch-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.ea-switch-desc {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.ea-switch-card .toggle-wrap {
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABS
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.ea-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.ea-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-surface);
+}
+
+.ea-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.ea-tab[aria-selected="true"] {
+  color: var(--accent);
+}
+
+.ea-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+}
+
+.ea-tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.ea-tab[aria-selected="true"] .ea-tab-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOOLBAR / TABLE
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.ea-search {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.ea-search i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.ea-search input {
+  width: 100%;
+  padding: 9px 12px 9px 33px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ea-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.ea-table-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.ea-scroll {
+  overflow-x: auto;
+}
+
+.ea-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.ea-table th {
+  text-align: left;
+  padding: 11px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.ea-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.ea-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ea-table tbody tr:hover {
+  background: var(--bg-surface);
+}
+
+.ea-col-actions {
+  text-align: right;
+  white-space: nowrap;
+  width: 60px;
+}
+
+.ea-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ea-identity-icon {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ea-identity-main {
+  min-width: 0;
+}
+
+.ea-identity-value {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ea-identity-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.ea-type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.ea-icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.ea-icon-btn.ea-danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.ea-icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   STATES
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-skeleton-row td {
+  padding: 14px 16px;
+}
+
+.ea-skeleton {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-surface-2) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 200% 100%;
+}
+
+.ea-empty {
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.ea-empty-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.ea-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.ea-empty-desc {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  max-width: 380px;
+  margin: 0 auto 18px;
+  line-height: 1.6;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ADD-ENTRY TYPE PICKER
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-type-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.ea-type-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 11px 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.ea-type-option i {
+  font-size: 14px;
+}
+
+.ea-type-option:hover {
+  border-color: var(--accent);
+}
+
+.ea-type-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ea-type-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CHECK TAB
+   ═══════════════════════════════════════════════════════════ */
+
+.ea-check-form {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.ea-check-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ea-check-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 4px 0 16px;
+}
+
+.ea-verdict {
+  display: flex;
+  gap: 13px;
+  padding: 18px 20px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.ea-verdict-icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.ea-verdict-allow {
+  background: var(--bg-card);
+  border: 1px solid rgba(0, 130, 98, 0.3);
+}
+
+.ea-verdict-allow .ea-verdict-icon {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.ea-verdict-deny {
+  background: var(--bg-card);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.ea-verdict-deny .ea-verdict-icon {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.ea-verdict-body {
+  min-width: 0;
+}
+
+.ea-verdict-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ea-verdict-detail {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.ea-verdict-match {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.ea-verdict-match strong {
+  color: var(--text-primary);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOTION — app-shell track. Transform/opacity only.
+   ═══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .ea-panel {
+    animation: eaPanelIn 0.16s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+
+  @keyframes eaPanelIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .ea-table tbody tr.ea-row-in {
+    animation: eaRowIn 0.18s ease-out both;
+    animation-delay: calc(var(--row-index, 0) * 40ms);
+  }
+
+  @keyframes eaRowIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* An ambient loading loop, not a response to input — paced and linear so
+     it never stalls visibly at either end (the 300ms UI budget governs
+     reactions to actions, not this). */
+  .ea-skeleton {
+    animation: eaShimmer 1.2s linear infinite;
+  }
+
+  @keyframes eaShimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  .ea-verdict {
+    animation: eaVerdictIn 0.2s ease-out both;
+  }
+
+  @keyframes eaVerdictIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .ea-check-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .ea-type-picker {
+    flex-direction: column;
+  }
+}

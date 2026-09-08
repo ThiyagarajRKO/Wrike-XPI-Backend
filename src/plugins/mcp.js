@@ -6,6 +6,12 @@ const {
 } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { createMcpServer } = require("../mcp/index.js");
 const { resolveAuth } = require("../mcp/tools/auth.js");
+const {
+  evaluateAccess,
+  clientIp,
+  isEnforced,
+} = require("../utils/environmentAccess.js");
+const { log: logActivity } = require("../utils/activityLog.js");
 
 /**
  * Fastify plugin that exposes the MCP (Model Context Protocol) endpoint.
@@ -41,16 +47,89 @@ module.exports = async function (fastify, opts) {
   // for the env-specific route points at env-specific authorize metadata
   // (see routes/oauth/wellKnown.js) instead of the generic picker flow.
   const handleMcpPost = (resourceMetadataUrl) => async (req, reply) => {
+    // Activity log — one row per MCP request (the REST path logs one row
+    // per HTTP call the same way; MCP has no per-tool-call hook to attach to
+    // in this build, so the request itself is the unit logged here).
+    const recordActivity = ({ envId, environmentName, actorEmail, allowed, code, statusCode }) =>
+      logActivity({
+        envId: envId || null,
+        environmentName: environmentName || null,
+        surface: "mcp",
+        actorEmail: actorEmail || null,
+        action: null,
+        resource: req.raw?.url || "/mcp",
+        method: null,
+        allowed,
+        code,
+        statusCode,
+        ip: clientIp(req),
+      });
+
     const authHeader = req.headers.authorization || "";
     const [scheme, token] = authHeader.split(" ");
     if (scheme?.toLowerCase() !== "bearer" || !token) {
+      recordActivity({ allowed: false, code: "UNAUTHORIZED", statusCode: 401 });
       return sendUnauthorized(reply, "Authorization required", resourceMetadataUrl);
     }
 
     const auth = await resolveAuth(token);
     if (!auth) {
+      recordActivity({ allowed: false, code: "TOKEN_INVALID", statusCode: 401 });
       return sendUnauthorized(reply, "Token is invalid or expired", resourceMetadataUrl);
     }
+
+    // Environment access scope, immediately after token validation — same
+    // gate and same rules as the REST path (src/middlewares/authentication.js).
+    let access;
+    try {
+      access = await evaluateAccess({
+        envId: auth.envId,
+        wrikeToken: auth.wrikeToken,
+        ip: clientIp(req),
+      });
+    } catch (err) {
+      recordActivity({
+        envId: auth.envId,
+        environmentName: auth.environmentName,
+        allowed: false,
+        code: "AUTHORIZATION_ERROR",
+        statusCode: 403,
+      });
+      return reply.code(403).send({
+        error: "forbidden",
+        error_description: "Access could not be verified for this token.",
+        code: "AUTHORIZATION_ERROR",
+      });
+    }
+
+    if (!access.allowed && isEnforced()) {
+      recordActivity({
+        envId: auth.envId,
+        environmentName: auth.environmentName,
+        actorEmail: access.email,
+        allowed: false,
+        code: access.code,
+        statusCode: 403,
+      });
+      return reply.code(403).send({
+        error: "forbidden",
+        error_description: access.message,
+        code: access.code,
+        checks: access.checks,
+      });
+    }
+
+    // Logged as "accepted" here, before the response is hijacked for
+    // streaming — this measures whether the MCP connection was authorized,
+    // not the success/failure of whatever tool calls happen over it.
+    recordActivity({
+      envId: auth.envId,
+      environmentName: auth.environmentName,
+      actorEmail: access.email,
+      allowed: true,
+      code: access.code,
+      statusCode: 200,
+    });
 
     if (typeof reply.hijack === "function") reply.hijack();
 

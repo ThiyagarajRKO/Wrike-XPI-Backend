@@ -10,6 +10,21 @@ import { adminApiRoute } from "./admin";
 import { portalApiRoute } from "./portal";
 // Auth Middleware
 import { ValidateToken } from "../middlewares/authentication";
+import { log as logActivity } from "../utils/activityLog";
+
+// GET/HEAD read; everything else is a write. Only used to label the activity
+// log's `action` column — matches the read/create/update/delete vocabulary
+// used elsewhere in the console without depending on it.
+const ACTION_BY_METHOD = {
+  GET: "read",
+  HEAD: "read",
+  OPTIONS: "read",
+  POST: "create",
+  PUT: "update",
+  PATCH: "update",
+  DELETE: "delete",
+};
+const actionForMethod = (method) => ACTION_BY_METHOD[String(method || "").toUpperCase()] || null;
 
 // MCP Plugin
 import mcpPlugin from "../plugins/mcp";
@@ -81,6 +96,31 @@ export const PrivateRouters = (fastify, opts, done) => {
   fastify.addHook("onRequest", (req, reply) =>
     ValidateToken(req, reply, fastify),
   );
+
+  // Activity log — one row per request, written after the response is
+  // already on the wire so logging never adds latency to the caller. Covers
+  // every outcome: a clean 200, a gate denial (req.access set, allowed:
+  // false), and a raw auth failure (bad/expired token — req.access was
+  // never reached, so this falls back to the response status alone).
+  fastify.addHook("onResponse", (req, reply, done) => {
+    const access = req.access;
+
+    logActivity({
+      envId: req.envId || null,
+      environmentName: req.environmentName || null,
+      surface: "rest",
+      actorEmail: req.callerEmail || null,
+      action: actionForMethod(req.method),
+      resource: req.routeOptions?.url || req.raw?.url || req.url,
+      method: req.method,
+      allowed: access ? !!access.allowed : reply.statusCode < 400,
+      code: access?.code || (reply.statusCode >= 400 ? "AUTH_FAILED" : null),
+      statusCode: reply.statusCode,
+      ip: access?.ip || req.ip || null,
+    });
+
+    done();
+  });
 
   fastify.register(campaignRoute, { prefix: "/wrikexpi/campaign" });
   fastify.register(channelRoute, { prefix: "/wrikexpi/channel" });

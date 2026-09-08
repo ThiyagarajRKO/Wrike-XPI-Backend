@@ -75,10 +75,26 @@ function toast(msg: string, type: "success" | "error" | "info" | "warning") {
     info: "linear-gradient(135deg, #2f81f7, #6e40c9)",
     warning: "linear-gradient(135deg, #d29922, #e89e1d)",
   };
+  const icons: Record<string, string> = {
+    success: "fa-circle-check",
+    error: "fa-circle-xmark",
+    info: "fa-circle-info",
+    warning: "fa-triangle-exclamation",
+  };
   const Toastify = window.Toastify;
   if (!Toastify) return;
-  Toastify({
-    text: msg,
+  const iconCls = icons[type] || "fa-circle-info";
+  const toastBody =
+    '<div style="display:flex;align-items:center;gap:10px">' +
+    '<i class="fa-solid ' +
+    iconCls +
+    '" style="flex:none;color:#fff;font-size:15px"></i>' +
+    '<span style="flex:1">' +
+    escHtml(msg) +
+    "</span>" +
+    "</div>";
+  const toastInstance = Toastify({
+    text: "",
     duration: 4500,
     gravity: "top",
     position: "right",
@@ -93,6 +109,11 @@ function toast(msg: string, type: "success" | "error" | "info" | "warning") {
       minWidth: "260px",
     },
   }).showToast();
+  // This Toastify build does not honour escapeHTML:false, so the icon/message
+  // markup is injected straight into the toast node after showToast().
+  if (toastInstance?.toastElement) {
+    toastInstance.toastElement.innerHTML = toastBody;
+  }
 }
 
 function badgeHtml(active: boolean): string {

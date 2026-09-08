@@ -2,6 +2,8 @@ import { adminAuthRoute } from "./auth";
 import { adminCredentialsRoute } from "./credentials";
 import { adminPortalUsersRoute } from "./users";
 import { adminCacheRoute } from "./cache";
+import { adminEnvironmentAccessRoute } from "./environmentAccess";
+import { adminActivityRoute } from "./activity";
 
 // Page handlers
 const AdminIndexPage = (req, reply) => reply.redirect("/admin/login");
@@ -52,6 +54,8 @@ export const adminApiRoute = (fastify, opts, done) => {
   fastify.register(adminCredentialsRoute, { prefix: "/credentials" });
   fastify.register(adminPortalUsersRoute, { prefix: "/portal-users" });
   fastify.register(adminCacheRoute, { prefix: "/cache" });
+  fastify.register(adminEnvironmentAccessRoute, { prefix: "/environment-access" });
+  fastify.register(adminActivityRoute, { prefix: "/activity" });
 
   done();
 };

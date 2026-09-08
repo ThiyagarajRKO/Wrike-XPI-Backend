@@ -8,3 +8,4 @@ logs/*.log
 reference
 
 public/app
+.tastemaker
