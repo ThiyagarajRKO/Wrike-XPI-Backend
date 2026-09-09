@@ -649,12 +649,15 @@ export default function PortalHome() {
               </svg>
             </div>
             <div className="logo-text">
-              <svg className="wrike-wordmark" viewBox="33 0 67 20" role="img" aria-label="Wrike">
-                <path d="M71.064 4.72a1.965 1.965 0 100-3.93 1.965 1.965 0 000 3.93zm1.579 1.578h-3.158v11.035h3.158V6.298zm-9.877 11.035V12.37c0-3 2.649-2.948 4.035-2.72V6.263c-2.21-.193-3.526.421-4.123 1.614h-.07l.017-1.561h-3.07v11.018h3.21zm-22.685 0h2.474l3.79-7.087 3.666 7.087h2.509l5.632-11.035h-3.737l-3.456 7.035-3.281-7.035h-2.684l-3.456 7.07-3.281-7.07H34.52l5.561 11.035zm36.053 0h2l3.298-4.158 2.79 4.158h3.72l-4.387-6.386 3.842-4.649h-3.701l-4.386 5.544h-.07L79.275.79h-3.14v16.544zm18.228-2.368c1.351 0 2.158-.72 2.544-1.298l2.421 1.667c-.982 1.28-2.509 2.28-5.035 2.28-3.386 0-5.912-2.544-5.912-5.754 0-3.228 2.579-5.755 5.912-5.755 3.403 0 5.702 2.562 5.702 5.755v.877h-8.58c.246 1.316 1.37 2.228 2.948 2.228zm2.58-4.421c-.352-1.158-1.37-1.965-2.825-1.965-1.492 0-2.492.807-2.843 1.965h5.667z" />
-              </svg>
-              <span className="sub">Portal</span>
+              <span className="brand">Xtend Backend</span>
+              <span
+                className="sub"
+                style={{ display: "flex", alignItems: "center", gap: 6 }}
+              >
+                User Portal
+                {!collapsed && <EnvBadge />}
+              </span>
             </div>
-            {!collapsed && <EnvBadge />}
           </a>
           <button
             className="sidebar-collapse-btn"
