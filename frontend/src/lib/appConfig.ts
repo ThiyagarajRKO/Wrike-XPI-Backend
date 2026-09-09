@@ -1,16 +1,22 @@
 export interface AppConfig {
   appUrl: string;
   wrikeRedirectUrl: string;
+  /** NODE_ENV of the running server (LOCAL, DEVELOPMENT, LIVE, UAT, ...). */
+  environment: string;
 }
 
-const DEFAULT_CONFIG: AppConfig = { appUrl: "", wrikeRedirectUrl: "" };
+export const DEFAULT_CONFIG: AppConfig = {
+  appUrl: "",
+  wrikeRedirectUrl: "",
+  environment: "",
+};
 
 /**
- * GET /api/v1/app-config — non-secret app config (APP_URL / WRIKE_REDIRECT_URL
- * env vars) fetched client-side. Shared by AdminDashboard.tsx and
- * PortalHome.tsx, the two pages that need it — only the server knows these
- * values, so they can't be derived client-side the way other pages' state
- * can, but there's nothing page-specific about them.
+ * GET /api/v1/app-config — non-secret app config (APP_URL / WRIKE_REDIRECT_URL /
+ * NODE_ENV env vars) fetched client-side. Shared by AdminDashboard.tsx and
+ * PortalHome.tsx, plus envTheme.ts (which reads `environment` on every page) —
+ * only the server knows these values, so they can't be derived client-side the
+ * way other pages' state can, but there's nothing page-specific about them.
  */
 export const fetchAppConfig = async (): Promise<AppConfig> => {
   try {
@@ -20,6 +26,7 @@ export const fetchAppConfig = async (): Promise<AppConfig> => {
     return {
       appUrl: body.data.appUrl || "",
       wrikeRedirectUrl: body.data.wrikeRedirectUrl || "",
+      environment: body.data.environment || "",
     };
   } catch {
     return DEFAULT_CONFIG;

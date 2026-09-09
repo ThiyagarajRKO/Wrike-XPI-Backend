@@ -58,13 +58,17 @@ export const PublicRouters = (fastify, opts, done) => {
   // Non-secret app config the admin dashboard / portal home pages need on
   // load (frontend/src/pages/AdminDashboard.tsx, PortalHome.tsx) — fetched
   // client-side instead of being server-injected into their HTML, same
-  // plain-sendFile pattern as every other migrated page.
+  // plain-sendFile pattern as every other migrated page. `environment` is
+  // also read on every page by frontend/src/lib/envTheme.ts to tint the UI
+  // accent per environment (one Vite build ships everywhere, so the value
+  // can only come from the server at runtime).
   fastify.get("/app-config", async (req, reply) => {
     reply.send({
       success: true,
       data: {
         appUrl: process.env.APP_URL || "",
         wrikeRedirectUrl: process.env.WRIKE_REDIRECT_URL || "",
+        environment: process.env.NODE_ENV || "",
       },
     });
   });

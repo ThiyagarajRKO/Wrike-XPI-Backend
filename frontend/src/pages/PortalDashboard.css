@@ -155,7 +155,7 @@ body {
   height: 34px;
   min-width: 34px;
   border-radius: var(--radius-sm);
-  background: #008262;
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;

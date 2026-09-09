@@ -8,6 +8,7 @@ import {
   type PortalEnvironment,
 } from "../lib/portalAuthApi";
 import { useHashPage } from "../lib/useHashPage";
+import EnvBadge from "../components/EnvBadge";
 import "./PortalDashboard.css";
 
 type PageId = "overview" | "environments";
@@ -436,6 +437,7 @@ export default function PortalDashboard() {
               </svg>
               <span className="sub">Portal</span>
             </div>
+            {!collapsed && <EnvBadge />}
           </a>
           <button
             className="sidebar-collapse-btn"

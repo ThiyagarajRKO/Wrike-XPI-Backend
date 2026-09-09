@@ -1,7 +1,7 @@
 import { CacheTable } from "./admin/CacheTable";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminLogout, clearAdminSession, getAccessToken } from "../lib/authApi";
-import { fetchAppConfig, type AppConfig } from "../lib/appConfig";
+import { fetchAppConfig, DEFAULT_CONFIG, type AppConfig } from "../lib/appConfig";
 import { useHashPage } from "../lib/useHashPage";
 import {
   assignPortalUserEnvironment,
@@ -30,6 +30,7 @@ import EnvironmentAccess from "./EnvironmentAccess";
 import PortalUserPermissions from "./PortalUserPermissions";
 import ActivityLog from "./ActivityLog";import { EnvironmentsTable } from "./admin/EnvironmentsTable";
 import { PortalUsersTable } from "./admin/PortalUsersTable";
+import EnvBadge from "../components/EnvBadge";
 import { CopyButton } from "../components/ui/CopyButton";
 import { ActiveBadge } from "../components/ui/Badge";
 import { MaskedValue } from "../components/ui/MaskedValue";
@@ -162,7 +163,7 @@ function CopyIconButton({
 // Faithful React port of views/admin/dashboard.ejs.
 export default function AdminDashboard() {
   const token = getAccessToken();
-  const [config, setConfig] = useState<AppConfig>({ appUrl: "", wrikeRedirectUrl: "" });
+  const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
 
   useEffect(() => {
     fetchAppConfig().then(setConfig);
@@ -960,6 +961,7 @@ export default function AdminDashboard() {
               </svg>
               <span className="sub">Admin Portal</span>
             </div>
+            {!collapsed && <EnvBadge />}
           </a>
           <button className="sidebar-collapse-btn" title="Collapse sidebar" onClick={() => setCollapsed((v) => !v)}>
             <i className={`fa-solid ${collapsed ? "fa-chevron-right" : "fa-chevron-left"}`} />

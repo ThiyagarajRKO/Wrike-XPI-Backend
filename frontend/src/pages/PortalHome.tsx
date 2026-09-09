@@ -10,8 +10,9 @@ import {
   type PortalEnvironmentFull,
   type PortalEnvironmentInput,
 } from "../lib/portalAuthApi";
-import { fetchAppConfig, type AppConfig } from "../lib/appConfig";
+import { fetchAppConfig, DEFAULT_CONFIG, type AppConfig } from "../lib/appConfig";
 import { useHashPage } from "../lib/useHashPage";
+import EnvBadge from "../components/EnvBadge";
 import "./PortalHome.css";
 
 type PageId = "overview" | "environments";
@@ -204,7 +205,7 @@ export default function PortalHome() {
 
   const token = getPortalToken();
   const role = getPortalRole();
-  const [config, setConfig] = useState<AppConfig>({ appUrl: "", wrikeRedirectUrl: "" });
+  const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
   const { appUrl, wrikeRedirectUrl } = config;
 
   useEffect(() => {
@@ -653,6 +654,7 @@ export default function PortalHome() {
               </svg>
               <span className="sub">Portal</span>
             </div>
+            {!collapsed && <EnvBadge />}
           </a>
           <button
             className="sidebar-collapse-btn"
