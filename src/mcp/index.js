@@ -34,6 +34,7 @@ MECHANICS
 - Read each tool's schema before calling; arguments are validated.
 - IDs returned by tools feed into the matching tools unchanged (XPI IDs are Wrike-based; wrike_* tools accept Wrike item/folder/task IDs).
 - If the user gives you a Wrike link instead of an ID (a permalink such as https://www.wrike.com/open.htm?id=... or https://app-eu.wrike.com/open.htm?id=...), do not parse or guess the ID from the URL yourself. Pass the permalink itself into get_item_details. The response's id field is the resolved v4 ID for that folder or task. Use that v4 ID for every following call, including native XPI tools.
+- If the user identifies someone by email address for an action that needs a user ID (assigning a task, adding a follower, and similar), do not guess or invent a user ID from the email. Call wrike_get_users first to look up that email and read the matching user's id from the response. Use that id for the action.
 - Respect limits and pagination: wrike_* tools cap results (e.g. 200 newest comments, pageSize on search_items) and return truncation/next-page signals — page through or narrow the query as each tool's description explains.`;
 
 /**
