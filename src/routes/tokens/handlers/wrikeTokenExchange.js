@@ -144,17 +144,13 @@ export const WrikeTokenExchange = ({ code, environmentId }, fastify) => {
         console.log("Inserted a new token meta data");
       }
 
-      // Create JWE token containing the DEK
-      const encryptedDEK = fastify.jwt.sign(
-        { dek: dek.toString("base64") },
-        { expiresIn: "180d" },
-      );
-
+      // Sign the XPI token. It carries the token-record id (t) and the DEK
+      // (d, base64) inline. The DEK is not secret from whoever holds this
+      // token; the signature is what protects the payload from tampering.
       const jweToken = fastify.jwt.sign(
         {
-          tid: userTokenId,
-          env,
-          enc: encryptedDEK,
+          t: userTokenId,
+          d: dek.toString("base64"),
         },
         { expiresIn: "180d" },
       );

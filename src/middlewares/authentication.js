@@ -35,31 +35,29 @@ const verifyBasicAuth = async (credentials) => {
   return { token, dek };
 };
 
-// Verify JWE token and extract DEK
+// Verify the XPI token and extract the token-record id + DEK.
 const verifyJWE = async (jweToken) => {
-  try {
-    const { tid, enc: encryptedDEK } = jwt.verify(
-      jweToken,
-      process.env.JWT_SECRET,
-    );
+  const payload = jwt.verify(jweToken, process.env.JWT_SECRET);
 
-    if (!encryptedDEK) {
-      throw new Error("Invalid token");
-    }
-
-    const token = await Tokens.GetById(tid);
-    if (!token.id) {
-      throw new Error("Invalid token");
-    }
-
-    // Decrypt the DEK from the JWE and convert back to Buffer
-    const { dek: dekStr } = jwt.verify(encryptedDEK, process.env.JWT_SECRET);
-    const dek = Buffer.from(dekStr, "base64");
-
-    return { token, dek };
-  } catch (err) {
-    throw err;
+  // Current tokens carry the record id as `t` and the DEK inline as `d`.
+  // Older tokens used `tid` plus `enc`, a second signed JWT wrapping the
+  // DEK. Accept both shapes until the old tokens age out (180d expiry).
+  const tid = payload.t ?? payload.tid;
+  let dekStr = payload.d;
+  if (!dekStr && payload.enc) {
+    ({ dek: dekStr } = jwt.verify(payload.enc, process.env.JWT_SECRET));
   }
+
+  if (!tid || !dekStr) {
+    throw new Error("Invalid token");
+  }
+
+  const token = await Tokens.GetById(tid);
+  if (!token.id) {
+    throw new Error("Invalid token");
+  }
+
+  return { token, dek: Buffer.from(dekStr, "base64") };
 };
 
 /**

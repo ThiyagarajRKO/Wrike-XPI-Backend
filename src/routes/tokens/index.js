@@ -1241,7 +1241,8 @@ export const tokenRoute = (fastify, opts, done) => {
         });
       }
 
-      const { tid } = await fastify.jwt.verify(token);
+      const xpiPayload = await fastify.jwt.verify(token);
+      const tid = xpiPayload.t ?? xpiPayload.tid;
 
       if (!tid) {
         return reply.code(400).send({
