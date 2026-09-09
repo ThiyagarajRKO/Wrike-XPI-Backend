@@ -31,6 +31,7 @@ import PortalUserPermissions from "./PortalUserPermissions";
 import ActivityLog from "./ActivityLog";import { EnvironmentsTable } from "./admin/EnvironmentsTable";
 import { PortalUsersTable } from "./admin/PortalUsersTable";
 import EnvBadge from "../components/EnvBadge";
+import BuildTag from "../components/BuildTag";
 import { CopyButton } from "../components/ui/CopyButton";
 import { ActiveBadge } from "../components/ui/Badge";
 import { MaskedValue } from "../components/ui/MaskedValue";
@@ -956,7 +957,10 @@ export default function AdminDashboard() {
               </svg>
             </div>
             <div className="logo-text">
-              <span className="brand">Xtend Backend</span>
+              <span className="brand">
+                Xtend Backend
+                <BuildTag />
+              </span>
               <span
                 className="sub"
                 style={{ display: "flex", alignItems: "center", gap: 6 }}

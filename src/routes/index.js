@@ -47,6 +47,7 @@ import {
 } from "./task/schema/getAllChannelTasks";
 import { GetAllCampaignTasksSchema } from "./task/schema/getAllCampaignTasks";
 import { getDatahubCustomFields } from "../utils/wrike";
+import { getBuildInfo } from "../utils/version";
 
 //Public Routes
 export const PublicRouters = (fastify, opts, done) => {
@@ -60,15 +61,21 @@ export const PublicRouters = (fastify, opts, done) => {
   // client-side instead of being server-injected into their HTML, same
   // plain-sendFile pattern as every other migrated page. `environment` is
   // also read on every page by frontend/src/lib/envTheme.ts to tint the UI
-  // accent per environment (one Vite build ships everywhere, so the value
-  // can only come from the server at runtime).
+  // accent per environment, and the `version`/`commit`/... fields feed the
+  // build tag in the sidebar footer / login pages (one Vite build ships
+  // everywhere, so these can only come from the server at runtime).
   fastify.get("/app-config", async (req, reply) => {
+    const build = getBuildInfo();
     reply.send({
       success: true,
       data: {
         appUrl: process.env.APP_URL || "",
         wrikeRedirectUrl: process.env.WRIKE_REDIRECT_URL || "",
         environment: process.env.NODE_ENV || "",
+        version: build.version,
+        commit: build.commit,
+        branch: build.branch,
+        buildTime: build.buildTime,
       },
     });
   });

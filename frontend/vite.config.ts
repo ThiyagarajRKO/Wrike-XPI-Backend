@@ -88,6 +88,7 @@ export default defineConfig(({ command }) => {
         "/mcp-docs": "http://localhost:4000",
         "/get-redirect-url": "http://localhost:4000",
         "/environments": "http://localhost:4000",
+        "/version": "http://localhost:4000",
         "/favicon.ico": "http://localhost:4000",
       },
     },

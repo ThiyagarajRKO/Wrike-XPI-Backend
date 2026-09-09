@@ -13,6 +13,7 @@ import {
 import { fetchAppConfig, DEFAULT_CONFIG, type AppConfig } from "../lib/appConfig";
 import { useHashPage } from "../lib/useHashPage";
 import EnvBadge from "../components/EnvBadge";
+import BuildTag from "../components/BuildTag";
 import "./PortalHome.css";
 
 type PageId = "overview" | "environments";
@@ -649,7 +650,10 @@ export default function PortalHome() {
               </svg>
             </div>
             <div className="logo-text">
-              <span className="brand">Xtend Backend</span>
+              <span className="brand">
+                Xtend Backend
+                <BuildTag />
+              </span>
               <span
                 className="sub"
                 style={{ display: "flex", alignItems: "center", gap: 6 }}

@@ -23,6 +23,7 @@ import {
   getCachedVisibleWrikeCredentials,
 } from "./utils/wrikeCredentials";
 import { startRetentionSweep } from "./utils/activityLog";
+import { getBuildInfo } from "./utils/version";
 
 (async () => {
   // Configure the framework and instantiate it
@@ -78,6 +79,13 @@ import { startRetentionSweep } from "./utils/activityLog";
   //   }
   // });
 
+  // Build identity (see src/utils/version.js). Unauthenticated, for deploy
+  // smoke checks and monitoring — the same info is embedded in the app UI's
+  // sidebar footer / login pages via GET /api/v1/app-config.
+  fastify.get("/version", async (request, reply) => {
+    reply.send(getBuildInfo());
+  });
+
   // Health check endpoint
   fastify.all("/health", async (request, reply) => {
     const healthcheck = {
@@ -86,6 +94,7 @@ import { startRetentionSweep } from "./utils/activityLog";
       timestamp: Date.now(),
       memoryUsage: process.memoryUsage(),
       version: process.version,
+      build: getBuildInfo(),
     };
     try {
       reply.code(200).send(healthcheck);

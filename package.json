@@ -1,6 +1,6 @@
 {
   "name": "wrike-webhook",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "src/index.js",
   "directories": {
@@ -11,7 +11,7 @@
     "dev": "nodemon --exec babel-node --max-old-space-size=4096 src/index.js",
     "clean": "rm -rf dist",
     "build:frontend": "cd frontend && npm install && npm run build",
-    "build": "npm run clean && npm run build:frontend && babel src --out-dir dist",
+    "build": "npm run clean && npm run build:frontend && babel src --out-dir dist && node scripts/gen-version.cjs",
     "migrate": "node_modules/sequelize-cli/lib/sequelize db:migrate",
     "seed": "node_modules/sequelize-cli/lib/sequelize db:seed:all",
     "lint": "eslint"

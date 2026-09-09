@@ -9,16 +9,16 @@
        properties are set as inline styles on <html>, which outrank the
        :root rules every page stylesheet defines.
 
-    2. A small text badge. Pages with a sidebar render <EnvBadge /> inline in
-       the brand row (see components/EnvBadge.tsx); the sidebar-less pages
-       (login, TOTP, root) get the floating fallback injected here.
+    2. Small text tags. Pages with a sidebar render <EnvBadge /> in the brand
+       row and <BuildTag /> in the footer; the sidebar-less pages (login,
+       TOTP, root) get the floating equivalents injected here.
 
-  LIVE (and any unrecognised value) is left completely untouched: original
-  green accent, no badge.
+  For the accent colour, LIVE (and any unrecognised value) is left completely
+  untouched: original green, no env badge. The build tag always shows.
 
   Imported for its side effect only, once per page, from each main-*.tsx.
 */
-import { fetchAppConfig } from "./appConfig";
+import { fetchAppConfig, type AppConfig } from "./appConfig";
 
 export interface Palette {
   accent: string;
@@ -46,18 +46,34 @@ const PALETTES: Record<string, Palette> = {
   },
 };
 
-// One shared fetch of the server NODE_ENV, reused by the colour override
-// here and by <EnvBadge />.
-let envPromise: Promise<string> | null = null;
+// One shared GET /api/v1/app-config for the whole page, reused by the accent
+// override here, <EnvBadge /> and <BuildTag />.
+let infoPromise: Promise<AppConfig> | null = null;
+
+/** The server's app config + build identity (never rejects). */
+export function getAppInfo(): Promise<AppConfig> {
+  if (!infoPromise) infoPromise = fetchAppConfig();
+  return infoPromise;
+}
 
 /** Resolved (trimmed) NODE_ENV of the running server, or "" if unavailable. */
 export function getEnvironment(): Promise<string> {
-  if (!envPromise) {
-    envPromise = fetchAppConfig()
-      .then((c) => c.environment.trim())
-      .catch(() => "");
+  return getAppInfo().then((c) => c.environment.trim());
+}
+
+/** Tooltip text for the build tag, e.g. "Build 0bdf0fa · 9/9/2026 · master". */
+export function buildTitle(info: {
+  commit: string;
+  branch: string;
+  buildTime: string;
+}): string {
+  const parts = [`Build ${info.commit || "unknown"}`];
+  if (info.buildTime) {
+    const d = new Date(info.buildTime);
+    if (!Number.isNaN(d.getTime())) parts.push(d.toLocaleString());
   }
-  return envPromise;
+  if (info.branch) parts.push(info.branch);
+  return parts.join(" · ");
 }
 
 /**
@@ -116,16 +132,44 @@ function renderFloatingBadge(env: string): void {
   else document.addEventListener("DOMContentLoaded", mount, { once: true });
 }
 
-async function initEnvTheme(): Promise<void> {
-  const env = await getEnvironment();
-  const palette = envPalette(env);
-  if (!palette) return; // LIVE or unknown: leave the design as-is.
+function renderFloatingVersion(info: AppConfig): void {
+  const mount = () => {
+    if (document.getElementById("build-tag")) return;
+    const el = document.createElement("div");
+    el.id = "build-tag";
+    el.textContent = `v${info.version}`;
+    el.title = buildTitle(info);
+    el.style.cssText = [
+      "position:fixed",
+      "left:12px",
+      "bottom:12px",
+      "z-index:2147483000",
+      "color:var(--text-muted,#94a3b8)",
+      "font:600 11px/1 'Inter',system-ui,-apple-system,sans-serif",
+      "letter-spacing:0.02em",
+      "pointer-events:none",
+      "user-select:none",
+    ].join(";");
+    document.body.appendChild(el);
+  };
 
-  applyPalette(palette);
+  if (document.body) mount();
+  else document.addEventListener("DOMContentLoaded", mount, { once: true });
+}
+
+async function initEnvTheme(): Promise<void> {
+  const info = await getAppInfo();
+
+  const palette = envPalette(info.environment);
+  if (palette) applyPalette(palette);
 
   // React mounts synchronously at module load, well before this fetch
   // resolves, so #sidebar is already in the DOM here if the page has one.
-  if (!document.querySelector("#sidebar")) renderFloatingBadge(env);
+  // Sidebar pages render <EnvBadge /> + <BuildTag /> themselves.
+  if (!document.querySelector("#sidebar")) {
+    if (palette) renderFloatingBadge(info.environment);
+    if (info.version) renderFloatingVersion(info);
+  }
 }
 
 void initEnvTheme();
