@@ -68,6 +68,17 @@ export function envPalette(env: string): Palette | null {
   return PALETTES[env.trim().toLowerCase()] ?? null;
 }
 
+// Short text shown in the badge; anything not listed uses the raw env name.
+const LABELS: Record<string, string> = {
+  development: "Dev",
+};
+
+/** Badge label for an environment name (e.g. "DEVELOPMENT" -> "Dev"). */
+export function envLabel(env: string): string {
+  const name = env.trim();
+  return LABELS[name.toLowerCase()] ?? name;
+}
+
 function applyPalette(palette: Palette): void {
   const s = document.documentElement.style;
   s.setProperty("--accent", palette.accent);
@@ -75,13 +86,13 @@ function applyPalette(palette: Palette): void {
   s.setProperty("--accent-soft", palette.accentSoft);
 }
 
-function renderFloatingBadge(label: string): void {
+function renderFloatingBadge(env: string): void {
   const mount = () => {
     if (document.getElementById("env-badge")) return;
     const el = document.createElement("div");
     el.id = "env-badge";
-    el.textContent = label;
-    el.title = `Environment: ${label}`;
+    el.textContent = envLabel(env);
+    el.title = `Environment: ${env}`;
     el.style.cssText = [
       "position:fixed",
       "right:12px",

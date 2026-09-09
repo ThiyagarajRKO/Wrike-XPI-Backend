@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { envPalette, getEnvironment } from "../lib/envTheme";
+import { envLabel, envPalette, getEnvironment } from "../lib/envTheme";
 
 /*
  * Small pill naming the current server environment (LOCAL / DEVELOPMENT /
@@ -43,7 +43,7 @@ export default function EnvBadge() {
         whiteSpace: "nowrap",
       }}
     >
-      {env}
+      {envLabel(env)}
     </span>
   );
 }
