@@ -72,6 +72,9 @@ export const getWrikeTokens = async ({ code, env, refresh_token }) => {
     return result;
   } catch (err) {
     console.log("Error while getting access token: ", err?.message ?? err);
+    if (err && typeof err === "object" && err.statusCode == null) {
+      err.statusCode = 403;
+    }
     throw err;
   }
 };
