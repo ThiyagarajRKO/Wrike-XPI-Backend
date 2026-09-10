@@ -7,6 +7,7 @@ import { GetUserDataSchema } from "./schema/getUserData";
 import { ValidateJWT } from "../../middlewares/authentication";
 import { log as logActivity } from "../../utils/activityLog";
 import { captureRequest, buildResponseSnapshot } from "../../utils/capture";
+import { clientIp } from "../../utils/environmentAccess";
 
 const ACTION_BY_METHOD = {
   GET: "read",
@@ -94,7 +95,10 @@ export const tokenRoute = (fastify, opts, done) => {
 
   fastify.get("/exchange", WrikeTokenExchangeSchema, async (req, reply) => {
     try {
-      const result = await WrikeTokenExchange(req.query, fastify);
+      const result = await WrikeTokenExchange(
+        { ...req.query, ip: clientIp(req) },
+        fastify,
+      );
 
       if (!result)
         return reply.code(400).send({
@@ -108,9 +112,10 @@ export const tokenRoute = (fastify, opts, done) => {
       });
     } catch (err) {
       console.error("Error processing /exchange:", err);
-      return reply.code(400).send({
+      return reply.code(err?.statusCode || 400).send({
         success: false,
         message: err?.message || err,
+        error: err?.code ? { code: err.code, checks: err.checks } : undefined,
       });
     }
   });
@@ -155,7 +160,7 @@ export const tokenRoute = (fastify, opts, done) => {
       }
 
       const result = await WrikeTokenExchange(
-        { ...req.query, ...decodedData },
+        { ...req.query, ...decodedData, ip: clientIp(req) },
         fastify,
       );
 

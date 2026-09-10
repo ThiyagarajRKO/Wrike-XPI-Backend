@@ -3,8 +3,9 @@ import { Tokens, Users } from "../../../controllers";
 import { getWrikeTokens, getUserData } from "../../../utils/wrike";
 import models from "../../../../models";
 import { GetById } from "../../../controllers/wrikeCredentials";
+import { evaluateAccess, SURFACE } from "../../../utils/environmentAccess";
 
-export const WrikeTokenExchange = ({ code, environmentId }, fastify) => {
+export const WrikeTokenExchange = ({ code, environmentId, ip }, fastify) => {
   return new Promise(async (resolve, reject) => {
     // Start database transaction for data consistency
     const transaction = await models.sequelize.transaction();
@@ -51,6 +52,32 @@ export const WrikeTokenExchange = ({ code, environmentId }, fastify) => {
       }
 
       console.log("Fetched Wrike user data");
+
+      // Environment-level access scope — same gate ValidateToken applies to
+      // every subsequent API call, run here BEFORE any credentials or token
+      // record are created. Without this, a caller who is not on the
+      // environment's allow list could still complete the OAuth exchange and
+      // walk away with valid, persistent XPI credentials for it — the
+      // allow list would only start blocking them on their first API call.
+      const access = await evaluateAccess({
+        envId: environmentId,
+        email: primaryEmail,
+        ip,
+        surface: SURFACE.API,
+      });
+
+      if (!access.allowed) {
+        console.log(
+          `Environment access denied for ${primaryEmail || "unknown caller"}: ${access.code}`,
+        );
+        await transaction.rollback();
+        return reject({
+          statusCode: 403,
+          message: access.message,
+          code: access.code,
+          checks: access.checks,
+        });
+      }
 
       const accountId = profiles?.[0]?.accountId;
 

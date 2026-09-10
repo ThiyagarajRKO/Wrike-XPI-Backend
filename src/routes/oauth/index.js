@@ -3,6 +3,7 @@ import { findRedirectionURL } from "../../utils/wrikeRedirect";
 import { getCachedVisibleWrikeCredentials } from "../../utils/wrikeCredentials";
 import { WrikeTokenExchange } from "../tokens/handlers/wrikeTokenExchange";
 import { ResolveAuthFromJWT } from "../../middlewares/authentication";
+import { clientIp } from "../../utils/environmentAccess";
 
 const ACCESS_TOKEN_TTL_SECONDS = 180 * 24 * 60 * 60; // matches the 180d JWE minted by WrikeTokenExchange
 const AUTH_CODE_TTL = "60s";
@@ -281,7 +282,11 @@ export const oauthRoute = (fastify, opts, done) => {
         }
 
         const result = await WrikeTokenExchange(
-          { code: decoded.wrikeCode, environmentId: decoded.environmentId },
+          {
+            code: decoded.wrikeCode,
+            environmentId: decoded.environmentId,
+            ip: clientIp(req),
+          },
           fastify,
         );
 
@@ -317,6 +322,15 @@ export const oauthRoute = (fastify, opts, done) => {
 
       return reply.code(400).send({ error: "unsupported_grant_type" });
     } catch (err) {
+      if (err?.statusCode === 403) {
+        // Environment allow list rejected this caller (see
+        // WrikeTokenExchange -> evaluateAccess) — a real OAuth2 error code,
+        // not a malformed/expired grant.
+        return reply.code(403).send({
+          error: "access_denied",
+          error_description: err?.message || "Access denied for this environment",
+        });
+      }
       return reply.code(400).send({
         error: "invalid_grant",
         error_description: err?.message || "Token exchange failed",
