@@ -2,7 +2,12 @@ import { Tokens } from "../controllers";
 import { getWrikeTokens } from "../utils/wrike";
 import * as crypto from "../utils/crypto";
 import jwt from "jsonwebtoken";
-import { evaluateAccess, clientIp, SURFACE } from "../utils/environmentAccess";
+import {
+  evaluateAccess,
+  clientIp,
+  SURFACE,
+  PUBLIC_DENIAL_MESSAGE,
+} from "../utils/environmentAccess";
 
 // Verify Basic Auth credentials and return unwrapped DEK
 const verifyBasicAuth = async (credentials) => {
@@ -176,8 +181,8 @@ export const ValidateToken = async (req, reply, fastify) => {
     if (!access.allowed) {
       return reply.code(403).send({
         success: false,
-        message: access.message,
-        error: { code: access.code, checks: access.checks },
+        message: PUBLIC_DENIAL_MESSAGE,
+        error: { code: access.code },
       });
     }
 

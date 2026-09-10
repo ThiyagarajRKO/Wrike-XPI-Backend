@@ -20,6 +20,19 @@ import {
 export { invalidateEnvironment };
 
 /**
+ * What a denied caller sees, on every surface (REST, MCP, OAuth/token
+ * exchange). The `message`/`checks` a decision carries below are diagnostic
+ * prose written for the admin console and activity log — they name the
+ * allow-list mechanism, list who was checked against what, and suggest
+ * fixes. None of that is this caller's business, and handing it to them
+ * exposes exactly how the gate works to whoever is being kept out. Every
+ * request-path gate must show this string instead and drop `checks`
+ * entirely from what it sends back.
+ */
+export const PUBLIC_DENIAL_MESSAGE =
+  "You are not authorized to access this resource.";
+
+/**
  * Environment-level API access scope, evaluated immediately after token
  * validation — the request-path gate for both the REST API
  * (src/middlewares/authentication.js) and MCP (src/plugins/mcp.js).

@@ -115,7 +115,7 @@ export const tokenRoute = (fastify, opts, done) => {
       return reply.code(err?.statusCode || 400).send({
         success: false,
         message: err?.message || err,
-        error: err?.code ? { code: err.code, checks: err.checks } : undefined,
+        error: err?.code ? { code: err.code } : undefined,
       });
     }
   });

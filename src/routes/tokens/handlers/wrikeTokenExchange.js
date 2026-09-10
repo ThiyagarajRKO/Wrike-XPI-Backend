@@ -3,7 +3,11 @@ import { Tokens, Users } from "../../../controllers";
 import { getWrikeTokens, getUserData } from "../../../utils/wrike";
 import models from "../../../../models";
 import { GetById } from "../../../controllers/wrikeCredentials";
-import { evaluateAccess, SURFACE } from "../../../utils/environmentAccess";
+import {
+  evaluateAccess,
+  SURFACE,
+  PUBLIC_DENIAL_MESSAGE,
+} from "../../../utils/environmentAccess";
 
 export const WrikeTokenExchange = ({ code, environmentId, ip }, fastify) => {
   return new Promise(async (resolve, reject) => {
@@ -67,15 +71,17 @@ export const WrikeTokenExchange = ({ code, environmentId, ip }, fastify) => {
       });
 
       if (!access.allowed) {
+        // Detailed reasoning stays server-side only (server log here, full
+        // decision in the admin console) — the caller gets the generic
+        // denial message below, never the allow-list mechanics.
         console.log(
-          `Environment access denied for ${primaryEmail || "unknown caller"}: ${access.code}`,
+          `Environment access denied for ${primaryEmail || "unknown caller"}: ${access.code} (${access.message})`,
         );
         await transaction.rollback();
         return reject({
           statusCode: 403,
-          message: access.message,
+          message: PUBLIC_DENIAL_MESSAGE,
           code: access.code,
-          checks: access.checks,
         });
       }
 

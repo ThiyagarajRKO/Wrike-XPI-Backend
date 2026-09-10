@@ -10,6 +10,7 @@ const {
   evaluateAccess,
   clientIp,
   SURFACE,
+  PUBLIC_DENIAL_MESSAGE,
 } = require("../utils/environmentAccess.js");
 const { log: logActivity } = require("../utils/activityLog.js");
 const {
@@ -166,9 +167,8 @@ module.exports = async function (fastify, opts) {
       });
       return reply.code(403).send({
         error: "forbidden",
-        error_description: access.message,
+        error_description: PUBLIC_DENIAL_MESSAGE,
         code: access.code,
-        checks: access.checks,
       });
     }
 
