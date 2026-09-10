@@ -41,6 +41,13 @@ const ADD_COLUMNS = [
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
+    const tables = await queryInterface.showAllTables();
+    if (!tables.map((t) => (typeof t === "string" ? t : t.tableName)).includes("api_activity_logs")) {
+      // Defensive: this migration is ordered to run after the create-table
+      // migration, so the table should exist. If it somehow does not, there is
+      // nothing to alter — bail rather than throw from describeTable.
+      return;
+    }
     const table = await queryInterface.describeTable("api_activity_logs");
     for (const { name, definition } of ADD_COLUMNS) {
       if (!table[name]) {
