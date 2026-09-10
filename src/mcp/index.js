@@ -3,6 +3,7 @@ import { registerCampaignTools } from "./tools/campaign.js";
 import { registerChannelTools } from "./tools/channel.js";
 import { registerTaskTools } from "./tools/task.js";
 import { registerDatahubTools } from "./tools/datahub.js";
+import { registerIdsTools } from "./tools/ids.js";
 import { registerWrikeProxyTools } from "./wrikeMcpProxy.js";
 import wrikeIconDataUri from "./wrikeIcon.js";
 
@@ -33,6 +34,7 @@ MECHANICS
 - Authentication is already resolved per request; never pass tokens or credentials.
 - Read each tool's schema before calling; arguments are validated.
 - IDs returned by tools feed into the matching tools unchanged (XPI IDs are Wrike-based; wrike_* tools accept Wrike item/folder/task IDs).
+- All campaign, channel, campaign-task, and channel-task tools (campaign_get/update/delete, channel_get/update/delete, task_get/update/delete, task_list_campaign, task_list_channel) require an API v4 ID for their campaignId/channelId/taskId parameter. If the user gives you a legacy API v2 ID instead (a short numeric-looking id, or one sourced from an old API v2 integration/export/URL), do not guess or pad it into a v4 ID. Call ids_convert first (type ApiV2Folder for campaigns/channels, ApiV2Task for tasks) to resolve it to the matching v4 ID, then use that v4 ID for the call.
 - If the user gives you a Wrike link instead of an ID (a permalink such as https://www.wrike.com/open.htm?id=... or https://app-eu.wrike.com/open.htm?id=...), do not parse or guess the ID from the URL yourself. Pass the permalink itself into get_item_details. The response's id field is the resolved v4 ID for that folder or task. Use that v4 ID for every following call, including native XPI tools.
 - If the user identifies someone by email address for an action that needs a user ID (assigning a task, adding a follower, and similar), do not guess or invent a user ID from the email. Call wrike_get_users first to look up that email and read the matching user's id from the response. Use that id for the action.
 - Respect limits and pagination: wrike_* tools cap results (e.g. 200 newest comments, pageSize on search_items) and return truncation/next-page signals — page through or narrow the query as each tool's description explains.`;
@@ -76,6 +78,7 @@ export const createMcpServer = async (fastify, serverUrl, auth) => {
   registerChannelTools(server, serverUrl, auth);
   registerTaskTools(server, serverUrl, auth);
   registerDatahubTools(server, serverUrl, auth);
+  registerIdsTools(server, serverUrl, auth);
 
   // Merges in Wrike's own hosted MCP tools (no-ops if WRIKE_MCP_URL is unset
   // or unreachable — native XPI tools above are unaffected either way).

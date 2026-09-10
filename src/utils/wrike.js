@@ -1154,6 +1154,26 @@ export const getCustomFields = async (wrikeToken, customFieldId = null) => {
   }
 };
 
+// Legacy API v2 ID converter
+export const convertLegacyIds = async (wrikeToken, type, ids) => {
+  try {
+    const url = `${process.env.WRIKE_ENDPOINT}/ids?type=${encodeURIComponent(
+      type,
+    )}&ids=${encodeURIComponent(JSON.stringify(ids))}`;
+
+    const wrikeIdsData = await GetResponse(url, "GET", {
+      "content-type": "application/json",
+      Authorization: `Bearer ${wrikeToken}`,
+    });
+
+    if (wrikeIdsData?.errorDescription) throw wrikeIdsData;
+
+    return wrikeIdsData;
+  } catch (err) {
+    throw err;
+  }
+};
+
 export const getRequestForm = async (wrikeToken, requestFormSpaceId) => {
   try {
     if (!requestFormSpaceId) {
