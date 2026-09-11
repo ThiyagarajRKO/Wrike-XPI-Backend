@@ -269,3 +269,50 @@ export const deletePortalEnvironment = async (
 export const portalLogout = async (token: string): Promise<void> => {
   await portalFetch("/api/v1/portal/logout", token, { method: "POST" });
 };
+
+/* ── Permissions ────────────────────────────────────────────────────────
+   Mirrors src/utils/portalPermissionCatalog.js — the module/action
+   vocabulary is fetched, not declared here, so a module added server-side
+   shows up with no frontend edit (same contract as the admin console's
+   frontend/src/lib/portalPermissionsApi.ts). */
+
+export type PortalActionName = "read" | "create" | "update" | "delete";
+
+export interface PortalModuleDef {
+  key: string;
+  label: string;
+  description: string;
+  actions: PortalActionName[];
+}
+
+export type PortalPermissionMatrix = Record<string, Record<PortalActionName, boolean>>;
+
+export interface PortalPermissionsResult {
+  actions: PortalActionName[];
+  modules: PortalModuleDef[];
+  permissions: PortalPermissionMatrix;
+}
+
+/**
+ * GET /api/v1/portal/auth/permissions — the logged-in portal user's own
+ * module matrix, used to hide nav items and CRUD buttons/actions they have
+ * no access to. Server-side enforcement (requirePortalPermission in
+ * src/middlewares/portalAuth.js) is what actually blocks a request; this is
+ * only what drives the UI so a user is never shown a control that would
+ * 403.
+ */
+export const getMyPortalPermissions = async (
+  token: string,
+): Promise<PortalPermissionsResult> => {
+  const res = await portalFetch("/api/v1/portal/auth/permissions", token);
+  const body = await res.json().catch(() => null);
+  if (!body?.success) throw new Error(body?.message || "Failed to load permissions");
+  return body.data as PortalPermissionsResult;
+};
+
+/** True if the matrix grants `action` on `moduleKey`. Missing entries are denied, not thrown. */
+export const canPortal = (
+  matrix: PortalPermissionMatrix | null | undefined,
+  moduleKey: string,
+  action: PortalActionName,
+): boolean => !!matrix?.[moduleKey]?.[action];

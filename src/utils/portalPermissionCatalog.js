@@ -37,6 +37,18 @@ export const MODULES = [
     description: "The email/domain/IP allow list controlling who can call the API.",
     actions: ALL,
   },
+  {
+    key: "activity_logs",
+    label: "Activity Logs",
+    description: "The API/MCP call audit trail: who called what, and whether it was allowed.",
+    actions: ["read"],
+  },
+  {
+    key: "cache",
+    label: "Cache Settings",
+    description: "Cached Redis keys and their values — read to browse, delete to clear a key.",
+    actions: ["read", "delete"],
+  },
 ];
 
 export const MODULE_KEYS = MODULES.map((m) => m.key);

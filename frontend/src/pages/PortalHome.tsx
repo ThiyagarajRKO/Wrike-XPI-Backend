@@ -1,26 +1,34 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  canPortal,
   clearPortalSession,
   createPortalEnvironment,
   deletePortalEnvironment,
+  getMyPortalPermissions,
   getPortalRole,
   getPortalToken,
   listPortalEnvironmentsFull,
   updatePortalEnvironment,
   type PortalEnvironmentFull,
   type PortalEnvironmentInput,
+  type PortalPermissionMatrix,
 } from "../lib/portalAuthApi";
 import { fetchAppConfig, DEFAULT_CONFIG, type AppConfig } from "../lib/appConfig";
 import { useHashPage } from "../lib/useHashPage";
 import EnvBadge from "../components/EnvBadge";
 import BuildTag from "../components/BuildTag";
+import PortalActivityPage from "./PortalActivityPage";
+import PortalCachePage from "./PortalCachePage";
+import { PortalEnvironmentsTable } from "./PortalEnvironmentsTable";
 import "./PortalHome.css";
 
-type PageId = "overview" | "environments";
+type PageId = "overview" | "environments" | "activity" | "cache";
 
 const PAGE_NAMES: Record<PageId, string> = {
   overview: "Overview",
   environments: "My Environments",
+  activity: "Activity Logs",
+  cache: "Cache Settings",
 };
 
 const PAGE_IDS = Object.keys(PAGE_NAMES) as PageId[];
@@ -115,18 +123,6 @@ function toast(msg: string, type: "success" | "error" | "info" | "warning") {
   }
 }
 
-function badgeHtml(active: boolean): string {
-  return active
-    ? '<span class="badge badge-success"><span class="dot"></span> Active</span>'
-    : '<span class="badge badge-danger"><span class="dot"></span> Inactive</span>';
-}
-
-function visibilityBadgeHtml(visible: boolean): string {
-  return visible
-    ? '<span class="badge badge-success"><span class="dot"></span> Visible</span>'
-    : '<span class="badge badge-warning"><span class="dot"></span> Hidden</span>';
-}
-
 function StatusBadge({ active }: { active: boolean }) {
   return active ? (
     <span className="badge badge-success">
@@ -138,21 +134,6 @@ function StatusBadge({ active }: { active: boolean }) {
     </span>
   );
 }
-
-const ENV_TABLE_HEAD = `
-  <thead>
-    <tr>
-      <th>Environment</th>
-      <th>Env ID</th>
-      <th>Client ID</th>
-      <th>Created</th>
-      <th>Last Updated</th>
-      <th>Visibility</th>
-      <th>Status</th>
-      <th style="width: 140px">Actions</th>
-    </tr>
-  </thead>
-`;
 
 const EMPTY_FORM = {
   name: "",
@@ -201,9 +182,6 @@ export default function PortalHome() {
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  const envTableContainerRef = useRef<HTMLDivElement>(null);
-  const envDataTableRef = useRef<any>(null);
-
   const token = getPortalToken();
   const role = getPortalRole();
   const [config, setConfig] = useState<AppConfig>(DEFAULT_CONFIG);
@@ -212,6 +190,31 @@ export default function PortalHome() {
   useEffect(() => {
     fetchAppConfig().then(setConfig);
   }, []);
+
+  /* ── Permission matrix — drives which nav items, pages and CRUD buttons
+     render at all. Server-side enforcement (requirePortalPermission) is
+     what actually blocks a denied request; this is what keeps a user from
+     ever being shown a control that would 403. ─────────────────────────── */
+  const [permissions, setPermissions] = useState<PortalPermissionMatrix | null>(null);
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    getMyPortalPermissions(token)
+      .then((res) => setPermissions(res.permissions))
+      .catch((err) => {
+        console.error(err);
+        setPermissions({});
+      })
+      .finally(() => setPermissionsLoaded(true));
+  }, [token]);
+
+  const can = (moduleKey: string, action: "read" | "create" | "update" | "delete") =>
+    canPortal(permissions, moduleKey, action);
+
+  const canSeeEnvironments = can("environments", "read");
+  const canSeeActivity = can("activity_logs", "read");
+  const canSeeCache = can("cache", "read");
 
   /* ── Session guard (mirrors the EJS inline script exactly) ──────────── */
   useEffect(() => {
@@ -230,7 +233,7 @@ export default function PortalHome() {
 
   /* ── Data loading ───────────────────────────────────────────────────── */
   const loadEnvironments = async () => {
-    if (!token) return;
+    if (!token || !canSeeEnvironments) return;
     window.NProgress?.start();
     try {
       const data = await listPortalEnvironmentsFull(token);
@@ -245,10 +248,26 @@ export default function PortalHome() {
   };
 
   useEffect(() => {
+    if (!permissionsLoaded) return;
     window.NProgress?.configure({ showSpinner: false, minimum: 0.15 });
-    loadEnvironments();
+    if (canSeeEnvironments) {
+      loadEnvironments();
+    } else {
+      setLoaded(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, permissionsLoaded, canSeeEnvironments]);
+
+  // If the current page requires a permission the matrix doesn't grant
+  // (a stale #hash, or an admin revoked access mid-session), bounce to
+  // Overview rather than rendering a page with no data and no actions.
+  useEffect(() => {
+    if (!permissionsLoaded) return;
+    if (activePage === "environments" && !canSeeEnvironments) setActivePage("overview");
+    if (activePage === "activity" && !canSeeActivity) setActivePage("overview");
+    if (activePage === "cache" && !canSeeCache) setActivePage("overview");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissionsLoaded, activePage, canSeeEnvironments, canSeeActivity, canSeeCache]);
 
   const stats = useMemo(() => {
     const total = environments.length;
@@ -258,170 +277,6 @@ export default function PortalHome() {
   }, [environments]);
 
   const recentEnvs = environments.slice(0, 5);
-
-  /* ── Environments table (DataTables) — imperative bridge, same approach
-     as PortalDashboard.tsx: DataTables restructures its container's DOM
-     heavily, so it gets a container React never renders into. ─────────── */
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = envTableContainerRef.current;
-    if (!$ || !container || !loaded || activePage !== "environments") return;
-
-    if (envDataTableRef.current) {
-      envDataTableRef.current.destroy();
-      envDataTableRef.current = null;
-    }
-
-    const $container = $(container).empty();
-
-    if (environments.length === 0) {
-      $container.html(
-        `<table class="dt" id="envTable">${ENV_TABLE_HEAD}<tbody>` +
-          "<tr><td colspan='8'><div class='empty-state'>" +
-          "<div class='empty-state-icon'><i class='fa-regular fa-folder-open'></i></div>" +
-          "<h3>No environments yet</h3>" +
-          "<p>Click <strong>Add Environment</strong> to create your first one.</p>" +
-          "</div></td></tr>" +
-          "</tbody></table>",
-      );
-      return;
-    }
-
-    const rowsHtml = environments
-      .map((env) => {
-        const actions =
-          "<div class='action-cell'>" +
-          "<button class='btn btn-ghost btn-sm env-edit-btn' data-id='" +
-          escHtml(env.id) +
-          "'><i class='fa-solid fa-pen-to-square'></i> Edit</button>" +
-          "<button class='btn btn-danger btn-sm env-del-btn' data-id='" +
-          escHtml(env.id) +
-          "' data-name='" +
-          escHtml(env.environment_name) +
-          "'><i class='fa-solid fa-trash'></i> Delete</button>" +
-          "</div>";
-
-        return (
-          "<tr>" +
-          "<td><strong>" +
-          escHtml(env.environment_name) +
-          "</strong></td>" +
-          "<td>" +
-          "<div class='action-cell'>" +
-          "<code style='font-size: 11px; color: var(--text-muted);'>" +
-          escHtml(env.id) +
-          "</code>" +
-          "<button class='icon-btn copy-id-btn' data-id='" +
-          env.id +
-          "' title='Copy ID'>" +
-          "<i class='fa-solid fa-copy'></i>" +
-          "</button>" +
-          "</div>" +
-          "</td>" +
-          "<td>" +
-          maskHtml(env.client_id) +
-          "</td>" +
-          "<td>" +
-          formatLocalDate(env.created_at) +
-          "</td>" +
-          "<td>" +
-          formatLocalDate(env.updated_at) +
-          "</td>" +
-          "<td>" +
-          visibilityBadgeHtml(env.is_visible) +
-          "</td>" +
-          "<td>" +
-          badgeHtml(env.is_active) +
-          "</td>" +
-          "<td>" +
-          actions +
-          "</td>" +
-          "</tr>"
-        );
-      })
-      .join("");
-
-    $container.html(`<table class="dt" id="envTable">${ENV_TABLE_HEAD}<tbody>${rowsHtml}</tbody></table>`);
-
-    envDataTableRef.current = $container.find("#envTable").DataTable({
-      pageLength: 10,
-      lengthMenu: [5, 10, 25, 50],
-      order: [],
-      columnDefs: [
-        { targets: 1, orderable: false, searchable: false },
-        { targets: 7, orderable: false, searchable: false },
-      ],
-      language: {
-        emptyTable: "No environments yet",
-        zeroRecords: "No matching environments",
-        lengthMenu: "Show _MENU_ rows",
-        search: "",
-        searchPlaceholder: "Search environments…",
-        info: "Showing _START_–_END_ of _TOTAL_",
-        paginate: { previous: "‹", next: "›" },
-      },
-    });
-
-    const layoutTimer = setTimeout(() => {
-      const $wrapper = $container.find(".dataTables_wrapper");
-      const $table = $wrapper.find("table");
-      const $filter = $wrapper.find(".dataTables_filter");
-      const $length = $wrapper.find(".dataTables_length");
-      const $info = $wrapper.find(".dataTables_info");
-      const $paginate = $wrapper.find(".dataTables_paginate");
-
-      $table.detach();
-      $filter.detach();
-      $length.detach();
-      $info.detach();
-      $paginate.detach();
-
-      const $scrollContainer = $('<div style="overflow-x:auto;min-width:0;flex:1;"></div>').append($table);
-      const $topControls = $(
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:12px;"></div>',
-      )
-        .append($length)
-        .append($filter);
-      const $bottomControls = $(
-        '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;flex-wrap:wrap;gap:12px;"></div>',
-      )
-        .append($info)
-        .append($paginate);
-
-      $wrapper.empty().append($topControls).append($scrollContainer).append($bottomControls);
-    }, 10);
-
-    return () => clearTimeout(layoutTimer);
-  }, [environments, loaded, activePage]);
-
-  /* Delegated click handlers for the edit/delete buttons DataTables owns.
-     (The copy-id-btn in the table has no handler in the original EJS —
-     it's inert there too, so it stays inert here.) */
-  useEffect(() => {
-    const $ = window.jQuery;
-    const container = envTableContainerRef.current;
-    if (!$ || !container) return;
-
-    const editHandler = function (this: HTMLElement) {
-      const id = $(this).data("id");
-      const env = environments.find((e) => e.id === id);
-      if (env) openEnvModal(env);
-    };
-
-    const deleteHandler = async function (this: HTMLElement) {
-      const id = $(this).data("id");
-      const name = $(this).data("name");
-      await handleDeleteEnvironment(String(id), String(name));
-    };
-
-    $(container).on("click", ".env-edit-btn", editHandler);
-    $(container).on("click", ".env-del-btn", deleteHandler);
-    return () => {
-      $(container).off("click", ".env-edit-btn", editHandler);
-      $(container).off("click", ".env-del-btn", deleteHandler);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [environments]);
 
   /* ── Add/Edit Environment modal ────────────────────────────────────── */
   const [envModalOpen, setEnvModalOpen] = useState(false);
@@ -683,16 +538,40 @@ export default function PortalHome() {
             </span>
             <span className="nl">Overview</span>
           </div>
-          <div
-            className={`nav-item${activePage === "environments" ? " active" : ""}`}
-            onClick={() => handleNav("environments")}
-          >
-            <span className="ni">
-              <i className="fa-solid fa-layer-group" />
-            </span>
-            <span className="nl">Environments</span>
-            <span className="nav-badge">{environments.length}</span>
-          </div>
+          {canSeeEnvironments && (
+            <div
+              className={`nav-item${activePage === "environments" ? " active" : ""}`}
+              onClick={() => handleNav("environments")}
+            >
+              <span className="ni">
+                <i className="fa-solid fa-layer-group" />
+              </span>
+              <span className="nl">Environments</span>
+              <span className="nav-badge">{environments.length}</span>
+            </div>
+          )}
+          {canSeeActivity && (
+            <div
+              className={`nav-item${activePage === "activity" ? " active" : ""}`}
+              onClick={() => handleNav("activity")}
+            >
+              <span className="ni">
+                <i className="fa-solid fa-clock-rotate-left" />
+              </span>
+              <span className="nl">Activity Logs</span>
+            </div>
+          )}
+          {canSeeCache && (
+            <div
+              className={`nav-item${activePage === "cache" ? " active" : ""}`}
+              onClick={() => handleNav("cache")}
+            >
+              <span className="ni">
+                <i className="fa-solid fa-database" />
+              </span>
+              <span className="nl">Cache Settings</span>
+            </div>
+          )}
         </div>
 
         <div className="sidebar-footer">
@@ -785,6 +664,7 @@ export default function PortalHome() {
               </div>
             </div>
 
+            {canSeeEnvironments && (
             <div className="card">
               <div className="card-header">
                 <div className="card-title">
@@ -840,12 +720,14 @@ export default function PortalHome() {
                             <StatusBadge active={env.is_active} />
                           </td>
                           <td>
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => openEnvModal(env)}
-                            >
-                              <i className="fa-solid fa-pen-to-square" /> Edit
-                            </button>
+                            {can("environments", "update") && (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => openEnvModal(env)}
+                              >
+                                <i className="fa-solid fa-pen-to-square" /> Edit
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -854,29 +736,54 @@ export default function PortalHome() {
                 )}
               </div>
             </div>
+            )}
           </div>
 
           {/* ══════ ENVIRONMENTS PAGE ══════ */}
+          {canSeeEnvironments && (
           <div className={`page${activePage === "environments" ? " active" : ""}`} id="page-environments">
             <div className="section-header">
               <div>
                 <div className="section-title">My Environments</div>
                 <div className="section-subtitle">Manage your Wrike environments</div>
               </div>
-              <button className="btn btn-primary" onClick={() => openEnvModal(null)}>
-                <i className="fa-solid fa-plus" />
-                Add Environment
-              </button>
+              {can("environments", "create") && (
+                <button className="btn btn-primary" onClick={() => openEnvModal(null)}>
+                  <i className="fa-solid fa-plus" />
+                  Add Environment
+                </button>
+              )}
             </div>
 
             <div className="card">
               <div className="card-body">
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div className="table-wrapper" ref={envTableContainerRef} />
-                </div>
+                <PortalEnvironmentsTable
+                  environments={environments}
+                  loading={!loaded}
+                  canUpdate={can("environments", "update")}
+                  canDelete={can("environments", "delete")}
+                  onEdit={openEnvModal}
+                  onDelete={(env) => handleDeleteEnvironment(env.id, env.environment_name)}
+                  onAdd={() => openEnvModal(null)}
+                />
               </div>
             </div>
           </div>
+          )}
+
+          {/* ══════ ACTIVITY LOGS PAGE ══════ */}
+          {canSeeActivity && (
+          <div className={`page${activePage === "activity" ? " active" : ""}`} id="page-activity">
+            <PortalActivityPage active={activePage === "activity"} />
+          </div>
+          )}
+
+          {/* ══════ CACHE SETTINGS PAGE ══════ */}
+          {canSeeCache && (
+          <div className={`page${activePage === "cache" ? " active" : ""}`} id="page-cache">
+            <PortalCachePage active={activePage === "cache"} canDelete={can("cache", "delete")} />
+          </div>
+          )}
         </div>
       </div>
 
