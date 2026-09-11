@@ -4,6 +4,7 @@ import {
   enableTotp,
   getTotpSetup,
   getTotpStatus,
+  revealTotp,
   type TotpSetup,
 } from "../lib/authApi";
 import { Badge } from "../components/ui/Badge";
@@ -11,7 +12,14 @@ import { CopyButton } from "../components/ui/CopyButton";
 import { toast } from "../lib/notify";
 import "./MfaSettings.css";
 
-type ViewState = "loading" | "enabled" | "disabled" | "enrolling" | "disabling";
+type ViewState =
+  | "loading"
+  | "enabled"
+  | "disabled"
+  | "enrolling"
+  | "disabling"
+  | "revealing"
+  | "revealed";
 
 export default function MfaSettings() {
   const [view, setView] = useState<ViewState>("loading");
@@ -98,6 +106,34 @@ export default function MfaSettings() {
     setView("enabled");
   };
 
+  const startReveal = () => {
+    setError(null);
+    setPassword("");
+    setSetup(null);
+    setView("revealing");
+  };
+
+  const confirmReveal = () => {
+    if (!password) return;
+    setError(null);
+    setBusy(true);
+    revealTotp(password)
+      .then((data) => {
+        setSetup(data);
+        setPassword("");
+        setView("revealed");
+      })
+      .catch((err: any) => setError(err?.message || "Invalid password"))
+      .finally(() => setBusy(false));
+  };
+
+  const cancelReveal = () => {
+    setPassword("");
+    setSetup(null);
+    setError(null);
+    setView("enabled");
+  };
+
   return (
     <div className="mfa-card">
       <div className="mfa-switch-card">
@@ -111,7 +147,7 @@ export default function MfaSettings() {
         </div>
         {view === "loading" ? (
           <Badge tone="neutral">Checking…</Badge>
-        ) : view === "enrolling" || view === "disabling" ? null : (
+        ) : view === "enrolling" || view === "disabling" || view === "revealing" || view === "revealed" ? null : (
           <Badge tone={view === "enabled" ? "success" : "neutral"} dot>
             {view === "enabled" ? "Enabled" : "Disabled"}
           </Badge>
@@ -128,6 +164,9 @@ export default function MfaSettings() {
 
       {view === "enabled" && (
         <div className="mfa-action-row">
+          <button className="btn btn-ghost" onClick={startReveal}>
+            <i className="fa-solid fa-eye" /> View QR / Secret
+          </button>
           <button className="btn btn-danger" onClick={startDisable}>
             <i className="fa-solid fa-lock-open" /> Disable MFA
           </button>
@@ -218,6 +257,67 @@ export default function MfaSettings() {
                 onClick={confirmDisable}
               >
                 {busy ? "Disabling…" : "Disable MFA"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === "revealing" && (
+        <div className="mfa-enroll">
+          <div className="mfa-enroll-step">
+            <div className="mfa-step-title">Confirm your password to view your MFA secret</div>
+            <div className="form-group">
+              <label className="form-label">Password</label>
+              <input
+                className="form-control"
+                type="password"
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && confirmReveal()}
+              />
+            </div>
+            {error && <div className="mfa-error">{error}</div>}
+            <div className="mfa-enroll-actions">
+              <button className="btn btn-ghost" disabled={busy} onClick={cancelReveal}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={busy || !password}
+                onClick={confirmReveal}
+              >
+                {busy ? "Verifying…" : "View"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {view === "revealed" && setup && (
+        <div className="mfa-enroll">
+          <div className="mfa-enroll-step">
+            <div className="mfa-step-title">Your MFA QR code</div>
+            <div className="mfa-qr-wrap">
+              <img src={setup.qrCodeImage} alt="TOTP QR code" width={180} height={180} />
+            </div>
+            <div className="mfa-secret-row">
+              <span className="mfa-secret-label">Setup key:</span>
+              <code className="mfa-secret-value">{setup.secret}</code>
+              <CopyButton value={setup.secret} title="Copy setup key" />
+            </div>
+          </div>
+
+          <div className="mfa-enroll-step">
+            <div className="mfa-step-title">&nbsp;</div>
+            <p className="mfa-switch-desc">
+              Scan this on another device to use the same account there, or re-add it if you lost
+              access to your authenticator app.
+            </p>
+            <div className="mfa-enroll-actions">
+              <button className="btn btn-ghost" onClick={cancelReveal}>
+                Close
               </button>
             </div>
           </div>

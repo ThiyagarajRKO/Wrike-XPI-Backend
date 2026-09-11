@@ -51,6 +51,19 @@ const fromBase32 = (base32) => {
 };
 
 /**
+ * Build the otpauth:// URL Google Authenticator (and compatible apps) scan
+ * @param {string} base32Secret The TOTP secret in base32
+ * @param {string} username
+ * @param {string} issuer
+ * @returns {string} otpauth:// URL
+ */
+export const buildTOTPUrl = (base32Secret, username, issuer = "WrikeXPI") => {
+  const encodedUsername = encodeURIComponent(username);
+  const encodedIssuer = encodeURIComponent(issuer);
+  return `otpauth://totp/${encodedIssuer}:${encodedUsername}?secret=${base32Secret}&issuer=${encodedIssuer}`;
+};
+
+/**
  * Generate a random TOTP secret
  * @returns {object} { secret: base32_string, qr_code_url: string }
  */
@@ -59,11 +72,7 @@ export const generateTOTPSecret = (username, issuer = "WrikeXPI") => {
     // Generate 20 bytes of random data (160 bits)
     const secret = crypto.randomBytes(20);
     const base32Secret = toBase32(secret);
-
-    // Generate QR code URL for Google Authenticator
-    const encodedUsername = encodeURIComponent(username);
-    const encodedIssuer = encodeURIComponent(issuer);
-    const qrCodeUrl = `otpauth://totp/${encodedIssuer}:${encodedUsername}?secret=${base32Secret}&issuer=${encodedIssuer}`;
+    const qrCodeUrl = buildTOTPUrl(base32Secret, username, issuer);
 
     return {
       secret: base32Secret,

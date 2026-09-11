@@ -171,6 +171,26 @@ export const enableTotp = async (
   }
 };
 
+export const revealTotp = async (password: string): Promise<TotpSetup> => {
+  const res = await adminFetch("/api/v1/admin/totp/reveal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+
+  const body = await res.json().catch(() => null);
+
+  if (!res.ok || !body?.success) {
+    throw new Error(body?.message || "Failed to reveal MFA secret");
+  }
+
+  return {
+    secret: body.data.secret,
+    qrCodeUrl: body.data.qr_code_url,
+    qrCodeImage: body.data.qr_code_image,
+  };
+};
+
 export const disableTotp = async (
   password: string,
   totpCode: string,

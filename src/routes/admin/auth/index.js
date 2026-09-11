@@ -5,6 +5,7 @@ import { GetTOTPSetup } from "./handlers/getTOTPSetup";
 import { EnableTOTP } from "./handlers/enableTOTP";
 import { DisableTOTP } from "./handlers/disableTOTP";
 import { GetTOTPStatus } from "./handlers/getTOTPStatus";
+import { RevealTOTP } from "./handlers/revealTOTP";
 import { Logout } from "./handlers/logout";
 
 import { RegisterSchema } from "./schema/register";
@@ -14,6 +15,7 @@ import { GetTOTPSetupSchema } from "./schema/getTOTPSetup";
 import { EnableTOTPSchema } from "./schema/enableTOTP";
 import { DisableTOTPSchema } from "./schema/disableTOTP";
 import { GetTOTPStatusSchema } from "./schema/getTOTPStatus";
+import { RevealTOTPSchema } from "./schema/revealTOTP";
 import { LogoutSchema } from "./schema/logout";
 
 import { verifyAdminJWT } from "../../../middlewares/adminAuth";
@@ -146,6 +148,28 @@ export const adminAuthRoute = (fastify, opts, done) => {
     async (req, reply) => {
       try {
         const result = await DisableTOTP(req.body, req.adminUser);
+
+        return reply.code(result?.statusCode || 200).send({
+          success: true,
+          message: result?.message,
+          data: result?.data,
+        });
+      } catch (err) {
+        return reply.code(err?.statusCode || 400).send({
+          success: false,
+          message: err?.message || err,
+        });
+      }
+    },
+  );
+
+  // POST /admin/totp/reveal  (protected)
+  fastify.post(
+    "/totp/reveal",
+    { ...RevealTOTPSchema, preHandler: [verifyAdminJWT] },
+    async (req, reply) => {
+      try {
+        const result = await RevealTOTP(req.body, req.adminUser);
 
         return reply.code(result?.statusCode || 200).send({
           success: true,

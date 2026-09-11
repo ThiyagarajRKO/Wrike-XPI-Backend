@@ -37,6 +37,9 @@
 
 .mfa-action-row {
   margin-top: 16px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .mfa-enroll {
