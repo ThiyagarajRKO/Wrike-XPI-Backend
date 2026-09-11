@@ -7,7 +7,8 @@ import { WrikeCredentials } from "../controllers";
  * environment it came from, and several prefixes carry no identity at all
  * (`space_datahub`, `entity_datahub`, `wrike-mcp-tools:<sha256>`). So unlike
  * Environments, Activity Logs and Environment Access — which scope by
- * `owner_id` — the cache cannot be scoped by ownership. What it can do is
+ * portal_user_environments mappings — the cache cannot be scoped by
+ * ownership. What it can do is
  * admit only the entries that are positively attributable to an environment
  * the caller owns: a key is theirs when one of its colon-delimited segments
  * equals an identifier from one of their environment records.

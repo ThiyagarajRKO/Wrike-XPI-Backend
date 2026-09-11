@@ -5,11 +5,11 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class PortalUsers extends Model {
     static associate(models) {
-      PortalUsers.hasMany(models.WrikeCredentials, {
+      PortalUsers.belongsToMany(models.WrikeCredentials, {
         as: "environments",
-        foreignKey: "owner_id",
-        onUpdate: "CASCADE",
-        onDelete: "SET NULL",
+        through: models.PortalUserEnvironments,
+        foreignKey: "user_id",
+        otherKey: "env_id",
       });
 
       PortalUsers.belongsTo(models.AdminUsers, {

@@ -1,4 +1,4 @@
-import { WrikeCredentials } from "../../../../controllers";
+import { WrikeCredentials, PortalAuth } from "../../../../controllers";
 import { encryptField } from "../../../../utils/crypto";
 import { syncWrikeCredentialsFromDB } from "../../../../utils/wrikeCredentials";
 
@@ -98,12 +98,17 @@ export const CreateEnvironment = (portalUser, body) => {
         campaign_space_id: campaign_space_id.trim(),
         is_active: is_active !== undefined ? Boolean(is_active) : true,
         is_visible: is_visible !== undefined ? Boolean(is_visible) : true,
-        // Admin portal users create shared envs (owner_id null); regular users own theirs
-        owner_id: portalUser.role === "admin" ? null : portalUser.id,
       };
 
       // Pass null as profile_id — updated_by FK references admin_users, not portal_users
       const env = await WrikeCredentials.Insert(null, data);
+
+      // Admin portal users create shared envs (no mapping); regular users
+      // are mapped to the one they created.
+      if (portalUser.role !== "admin") {
+        await PortalAuth.AssignEnvironment(null, portalUser.id, env.id);
+      }
+
       await syncWrikeCredentialsFromDB();
 
       return resolve({

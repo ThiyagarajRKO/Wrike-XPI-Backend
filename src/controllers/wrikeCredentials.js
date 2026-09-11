@@ -86,23 +86,6 @@ export const GetAll = async () => {
   }
 };
 
-// Get admin-level environments (owner_id is null — not assigned to any portal user)
-export const GetAdminEnvironments = async () => {
-  try {
-    const credentials = await models.WrikeCredentials.findAll({
-      where: {
-        owner_id: null,
-        is_active: true,
-        deleted_at: null,
-      },
-      order: [["created_at", "DESC"]],
-    });
-    return credentials;
-  } catch (err) {
-    throw err;
-  }
-};
-
 // Get all active and visible credentials (for user-facing dropdowns)
 export const GetAllVisible = async () => {
   try {
@@ -204,18 +187,58 @@ export const Deactivate = async (environmentName) => {
   }
 };
 
-// Get environments owned by a specific portal user
+// Get environments mapped to a specific portal user (via portal_user_environments)
 export const GetByOwnerId = async (ownerId) => {
   try {
     if (!ownerId)
       throw { statusCode: 400, message: "Owner id must not be empty" };
 
-    const credentials = await models.WrikeCredentials.findAll({
-      where: { owner_id: ownerId, deleted_at: null },
+    const mappings = await models.PortalUserEnvironments.findAll({
+      attributes: [],
+      where: { user_id: ownerId, deleted_at: null },
+      include: [
+        {
+          model: models.WrikeCredentials,
+          as: "environment",
+          where: { deleted_at: null },
+          required: true,
+        },
+      ],
       order: [["created_at", "DESC"]],
     });
 
-    return credentials;
+    return mappings.map((m) => m.environment);
+  } catch (err) {
+    throw err;
+  }
+};
+
+// Batch-resolve the portal users currently mapped to each of the given
+// environment ids — used by the admin credentials list so it doesn't run
+// one query per row.
+export const GetOwnersByEnvIds = async (envIds) => {
+  try {
+    if (!envIds || !envIds.length) return {};
+
+    const mappings = await models.PortalUserEnvironments.findAll({
+      attributes: ["env_id"],
+      where: { env_id: envIds, deleted_at: null },
+      include: [
+        {
+          model: models.PortalUsers,
+          as: "user",
+          attributes: ["id", "username"],
+          required: true,
+        },
+      ],
+    });
+
+    const byEnvId = {};
+    for (const m of mappings) {
+      if (!byEnvId[m.env_id]) byEnvId[m.env_id] = [];
+      byEnvId[m.env_id].push({ id: m.user.id, username: m.user.username });
+    }
+    return byEnvId;
   } catch (err) {
     throw err;
   }

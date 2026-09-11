@@ -27,7 +27,9 @@ export interface AdminEnvironment {
   custom_field_check_enabled: boolean;
   created_at?: string;
   updated_at?: string;
-  owner_id?: string | null;
+  /** Portal users currently mapped to this environment — an environment can
+      be mapped to more than one user at once, each managing it independently. */
+  owners?: { id: string; username: string }[];
   deleted_at?: string | null;
 }
 
@@ -78,7 +80,7 @@ export const listEnvironments = async (): Promise<AdminEnvironment[]> => {
       custom_field_check_enabled: !!c.custom_field_check_enabled,
       created_at: c.created_at,
       updated_at: c.updated_at,
-      owner_id: c.owner_id,
+      owners: Array.isArray(c.owners) ? c.owners : [],
       deleted_at: c.deleted_at,
     }));
   }

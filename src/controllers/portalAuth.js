@@ -126,22 +126,34 @@ export const Delete = async (profile_id, id) => {
   }
 };
 
-// ─── User-Environment mappings (via wrike_credentials.owner_id) ──────────────
+// ─── User-Environment mappings (via portal_user_environments) ────────────────
+// One environment can be mapped to many portal users at once — each mapping
+// is its own soft-deletable row, so revoking one user's access never affects
+// anyone else's.
 
 export const GetUserEnvironments = async (userId) => {
   try {
-    const environments = await models.WrikeCredentials.findAll({
-      attributes: [
-        "id",
-        "environment_name",
-        "is_active",
-        "is_visible",
-        "account_id",
+    const mappings = await models.PortalUserEnvironments.findAll({
+      attributes: [],
+      where: { user_id: userId, deleted_at: null },
+      include: [
+        {
+          model: models.WrikeCredentials,
+          as: "environment",
+          attributes: [
+            "id",
+            "environment_name",
+            "is_active",
+            "is_visible",
+            "account_id",
+          ],
+          where: { is_active: true, deleted_at: null },
+          required: true,
+        },
       ],
-      where: { owner_id: userId, is_active: true, deleted_at: null },
       order: [["created_at", "DESC"]],
     });
-    return environments;
+    return mappings.map((m) => m.environment);
   } catch (err) {
     throw err;
   }
@@ -154,19 +166,23 @@ export const AssignEnvironment = async (profile_id, userId, environmentId) => {
     });
     if (!env) throw { statusCode: 404, message: "Environment not found" };
 
-    if (env.owner_id)
-      throw {
-        statusCode: 409,
-        message: "Environment already assigned to a user",
-      };
+    const existing = await models.PortalUserEnvironments.findOne({
+      where: { user_id: userId, env_id: environmentId },
+      paranoid: false,
+    });
 
-    await models.WrikeCredentials.update(
-      { owner_id: userId },
-      {
-        where: { id: environmentId },
-        individualHooks: true,
-        profile_id,
-      },
+    if (existing) {
+      if (!existing.deleted_at) return; // already mapped — idempotent no-op
+
+      await existing.restore();
+      existing.updated_by = profile_id;
+      await existing.save({ profile_id });
+      return;
+    }
+
+    await models.PortalUserEnvironments.create(
+      { user_id: userId, env_id: environmentId },
+      { profile_id },
     );
   } catch (err) {
     throw err;
@@ -175,15 +191,13 @@ export const AssignEnvironment = async (profile_id, userId, environmentId) => {
 
 export const RevokeEnvironment = async (userId, environmentId) => {
   try {
-    const updated = await models.WrikeCredentials.update(
-      { owner_id: null },
-      {
-        where: { id: environmentId, owner_id: userId },
-        individualHooks: true,
-      },
-    );
-    if (!updated[0])
+    const mapping = await models.PortalUserEnvironments.findOne({
+      where: { user_id: userId, env_id: environmentId },
+    });
+    if (!mapping)
       throw { statusCode: 404, message: "Environment assignment not found" };
+
+    await mapping.destroy();
   } catch (err) {
     throw err;
   }

@@ -693,7 +693,12 @@ export default function AdminDashboard() {
         getPortalUserEnvironments(userId),
         listEnvironments(),
       ]);
-      const unassigned = allCreds.filter((e) => !e.owner_id && e.is_active && !e.deleted_at);
+      const assignedIds = new Set(userEnvs.map((e) => e.id));
+      // An environment can be mapped to multiple users at once, so the only
+      // thing that makes one unselectable here is this user already having it.
+      const unassigned = allCreds.filter(
+        (e) => !assignedIds.has(e.id) && e.is_active && !e.deleted_at,
+      );
       setPuAssignedEnvs(userEnvs);
       setPuUnassignedEnvs(unassigned);
     } catch {
@@ -1861,7 +1866,7 @@ export default function AdminDashboard() {
 
               <div className="info-banner">
                 <i className="fa-solid fa-circle-info" />
-                <span>Each environment can only be mapped to one user at a time.</span>
+                <span>An environment can be mapped to multiple users — each manages it independently.</span>
               </div>
 
               {puUnassignedEnvs.length ? (
@@ -1903,7 +1908,7 @@ export default function AdminDashboard() {
                     fontSize: 12.5,
                   }}
                 >
-                  No unmapped environments left — every environment has a user.
+                  This user already has every environment mapped.
                 </div>
               )}
             </div>

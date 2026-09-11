@@ -16,12 +16,15 @@ export const DeleteEnvironment = (portalUser, id) => {
         return reject({ statusCode: 404, message: "Environment not found" });
       }
 
-      // Regular portal users can only delete their own environments
-      if (portalUser.role !== "admin" && env.owner_id !== portalUser.id) {
-        return reject({
-          statusCode: 403,
-          message: "Forbidden: not your environment",
-        });
+      // Regular portal users can only delete environments mapped to them
+      if (portalUser.role !== "admin") {
+        const owned = await WrikeCredentials.GetByOwnerId(portalUser.id);
+        if (!(owned || []).some((e) => e.id === id)) {
+          return reject({
+            statusCode: 403,
+            message: "Forbidden: not your environment",
+          });
+        }
       }
 
       // Pass null as profile_id — updated_by FK references admin_users, not portal_users

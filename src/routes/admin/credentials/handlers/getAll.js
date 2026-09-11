@@ -5,6 +5,9 @@ export const GetAll = () => {
   return new Promise(async (resolve, reject) => {
     try {
       const credentials = await WrikeCredentials.GetAllWithDeleted();
+      const ownersByEnvId = await WrikeCredentials.GetOwnersByEnvIds(
+        credentials.map((cred) => cred.id),
+      );
 
       const data = credentials.map((cred) => ({
         id: cred.id,
@@ -22,7 +25,7 @@ export const GetAll = () => {
           cred.xpi_request_form_mapping_datahub_id || null,
         xpi_space_name_datahub_id: cred.xpi_space_name_datahub_id || null,
         campaign_space_id: cred.campaign_space_id || null,
-        owner_id: cred.owner_id || null,
+        owners: ownersByEnvId[cred.id] || [],
         is_active: cred.is_active,
         is_visible: cred.is_visible,
         allowlist_check_enabled: cred.allowlist_check_enabled,

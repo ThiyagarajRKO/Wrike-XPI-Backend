@@ -6,7 +6,7 @@ export const GetMyEnvironments = (portalUser) => {
     try {
       let environments;
 
-      // Admin role sees ALL environments; regular users see their own (owner_id = their id)
+      // Admin role sees ALL environments; regular users see only those mapped to them
       if (portalUser.role === "admin") {
         environments = await WrikeCredentials.GetAllForPortal();
       } else {
