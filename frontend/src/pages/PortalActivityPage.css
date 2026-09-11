@@ -1,0 +1,753 @@
+/* Portal Activity Log page.
+   Token-for-token the design of the admin console's Activity Log
+   (frontend/src/pages/ActivityLog.css + the table-card shell from
+   EnvironmentAccess.css), re-scoped under a `pal-` prefix so the portal
+   bundle never has to pull the admin stylesheets in just to reuse them.
+
+   Colours come from the portal shell's own tokens (PortalHome.css), so the
+   accent is the portal green rather than the admin blue — same design, the
+   right theme.
+
+   Mood: same enterprise-quiet register as the rest of the portal shell. The
+   one departure the page earns: a persistent left-edge colour bar per row,
+   because an audit log's whole job is "was this allowed" and that answer
+   should be legible without reading a cell. */
+
+/* ── Header extras ──────────────────────────────────────────────────── */
+
+.pal-head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pal-retention {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pal-retention i {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+/* The portal module only ever grants "read", so the page states that once
+   here instead of repeating it on every control. */
+.pal-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pal-stats {
+  margin-bottom: 18px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FILTER BAR
+   One considered strip, not a pile of loose selects: a search box
+   with the primary signal (who), an environment select (where),
+   and two chip groups (what kind, what happened) — grouped so
+   the eye reads it as one control surface.
+   ═══════════════════════════════════════════════════════════ */
+
+.pal-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.pal-search {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.pal-search i {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.pal-search input {
+  width: 100%;
+  padding: 9px 12px 9px 33px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.pal-search input:focus {
+  outline: none;
+  background: var(--bg-card);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* AdminSelect draws its own trigger/panel chrome — this wrapper only sizes
+   it within the filter bar. */
+.pal-env-select {
+  min-width: 190px;
+}
+
+/* Chip groups — a bordered pill holding buttons, one lit at a time. */
+.pal-chipgroup {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.pal-chip {
+  padding: 6px 11px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.pal-chip:hover {
+  background: var(--bg-card);
+}
+
+.pal-chip[aria-pressed="true"] {
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.pal-chip-success[aria-pressed="true"] {
+  background: var(--success);
+}
+
+.pal-chip-danger[aria-pressed="true"] {
+  background: var(--danger);
+}
+
+.pal-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABLE CARD
+   Same shell the allow-list and admin log use: card, horizontal
+   scroll, skeleton rows, empty state.
+   ═══════════════════════════════════════════════════════════ */
+
+.pal-table-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.pal-scroll {
+  overflow-x: auto;
+}
+
+.pal-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pal-table th {
+  text-align: left;
+  padding: 11px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.pal-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.pal-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.pal-table tbody tr:hover {
+  background: var(--bg-surface);
+}
+
+.pal-table th,
+.pal-table td {
+  white-space: nowrap;
+}
+
+/* The allow/deny signal, read down the left edge of the whole table before
+   any cell is read individually. */
+.pal-table tbody tr {
+  border-left: 3px solid transparent;
+}
+
+.pal-table tbody tr.pal-row-allowed {
+  border-left-color: var(--success);
+}
+
+.pal-table tbody tr.pal-row-denied {
+  border-left-color: var(--danger);
+}
+
+.pal-time {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pal-caller {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pal-unresolved {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--warning);
+}
+
+.pal-unresolved i {
+  font-size: 10px;
+}
+
+.pal-surface-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--bg-surface-2);
+  color: var(--text-secondary);
+}
+
+.pal-surface-mcp {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.pal-called {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+}
+
+.pal-called code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  white-space: nowrap;
+}
+
+.pal-method {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+/* Result — an icon chip, not just a text badge, so allowed/denied reads as a
+   shape as well as a colour (never colour alone as the only signal). */
+.pal-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pal-result-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+}
+
+.pal-result-allow {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.pal-result-deny {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pal-result-text {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pal-status {
+  margin-left: 7px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pal-ip {
+  font-size: 12px;
+}
+
+.pal-ip-code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+.pal-muted {
+  color: var(--text-muted);
+}
+
+/* Table caption, kept in the accessibility tree but out of the layout. */
+.pal-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Rows-per-page toolbar ──────────────────────────────────────────── */
+
+.pal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.pal-range {
+  font-variant-numeric: tabular-nums;
+}
+
+.pal-pagesize {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.pal-pagesize-select {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  padding: 5px 8px;
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+
+.pal-pagesize-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ── Pagination ─────────────────────────────────────────────────────── */
+
+.pal-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.pal-page-numbers {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pal-pageinfo {
+  font-variant-numeric: tabular-nums;
+}
+
+.pal-page-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-family: inherit;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.pal-page-btn:hover:not(.current) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pal-page-btn.current {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+  cursor: default;
+}
+
+.pal-page-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pal-page-ellipsis {
+  padding: 0 2px;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.pal-page-arrow {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.pal-page-arrow:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.pal-page-arrow:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.pal-page-arrow:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── States ─────────────────────────────────────────────────────────── */
+
+.pal-skeleton-row td {
+  padding: 14px 16px;
+}
+
+.pal-skeleton {
+  height: 12px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-surface-2) 50%,
+    var(--bg-surface) 100%
+  );
+  background-size: 200% 100%;
+}
+
+.pal-empty {
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.pal-empty-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: var(--bg-surface);
+  color: var(--text-muted);
+}
+
+.pal-empty-icon.pal-empty-danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.pal-empty-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 5px;
+}
+
+.pal-empty-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 360px;
+  margin: 0 auto;
+}
+
+/* ── Call details — clickable rows + the row-click modal ────────────── */
+
+.pal-row-clickable {
+  cursor: pointer;
+}
+
+.pal-row-clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.pal-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px 18px;
+  margin: 0 0 20px;
+}
+
+.pal-detail-grid > div {
+  min-width: 0;
+}
+
+.pal-detail-grid dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.pal-detail-grid dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.pal-detail-resource {
+  grid-column: 1 / -1;
+}
+
+.pal-detail-resource dd code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  display: block;
+  overflow-x: auto;
+}
+
+.pal-payload-block {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 16px;
+  background: var(--bg-card);
+}
+
+.pal-payload-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.pal-copy-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.pal-copy-btn:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pal-json {
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 260px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pal-no-payload {
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOTION — App shell track: a staggered entrance when a page
+   of rows loads, same 0.18s/40ms timing as the rest of the shell.
+   ═══════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: no-preference) {
+  .pal-table tbody tr.pal-row-in {
+    animation: palRowIn 0.18s ease-out both;
+    animation-delay: calc(var(--row-index, 0) * 40ms);
+  }
+
+  @keyframes palRowIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+@media (max-width: 780px) {
+  .pal-filterbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pal-search,
+  .pal-env-select {
+    max-width: none;
+    width: 100%;
+  }
+
+  .pal-chipgroup {
+    justify-content: space-between;
+  }
+
+  .pal-called code {
+    max-width: 160px;
+  }
+
+  .pal-toolbar,
+  .pal-pagination {
+    flex-wrap: wrap;
+  }
+}

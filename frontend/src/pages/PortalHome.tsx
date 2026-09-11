@@ -181,6 +181,10 @@ export default function PortalHome() {
   const [environments, setEnvironments] = useState<PortalEnvironmentFull[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Bumped by the top-bar Refresh button; the data pages watch it so their
+  // own reload matches the shell's, exactly as the admin console's Activity
+  // Log does with `refreshKey`.
+  const [dataRefreshKey, setDataRefreshKey] = useState(0);
 
   const token = getPortalToken();
   const role = getPortalRole();
@@ -215,6 +219,7 @@ export default function PortalHome() {
   const canSeeEnvironments = can("environments", "read");
   const canSeeActivity = can("activity_logs", "read");
   const canSeeCache = can("cache", "read");
+  const canSeeEnvironmentAccess = can("environment_access", "read");
 
   /* ── Session guard (mirrors the EJS inline script exactly) ──────────── */
   useEffect(() => {
@@ -463,6 +468,7 @@ export default function PortalHome() {
 
   const handleRefresh = () => {
     setRefreshing(true);
+    setDataRefreshKey((k) => k + 1);
     loadEnvironments().finally(() => {
       setTimeout(() => setRefreshing(false), 600);
     });
@@ -550,15 +556,10 @@ export default function PortalHome() {
               <span className="nav-badge">{environments.length}</span>
             </div>
           )}
-          {canSeeActivity && (
-            <div
-              className={`nav-item${activePage === "activity" ? " active" : ""}`}
-              onClick={() => handleNav("activity")}
-            >
-              <span className="ni">
-                <i className="fa-solid fa-clock-rotate-left" />
-              </span>
-              <span className="nl">Activity Logs</span>
+
+          {(canSeeCache || canSeeActivity) && (
+            <div className="nav-group-label" style={{ marginTop: 6 }}>
+              Settings
             </div>
           )}
           {canSeeCache && (
@@ -570,6 +571,17 @@ export default function PortalHome() {
                 <i className="fa-solid fa-database" />
               </span>
               <span className="nl">Cache Settings</span>
+            </div>
+          )}
+          {canSeeActivity && (
+            <div
+              className={`nav-item${activePage === "activity" ? " active" : ""}`}
+              onClick={() => handleNav("activity")}
+            >
+              <span className="ni">
+                <i className="fa-solid fa-clock-rotate-left" />
+              </span>
+              <span className="nl">Activity Log</span>
             </div>
           )}
         </div>
@@ -774,7 +786,11 @@ export default function PortalHome() {
           {/* ══════ ACTIVITY LOGS PAGE ══════ */}
           {canSeeActivity && (
           <div className={`page${activePage === "activity" ? " active" : ""}`} id="page-activity">
-            <PortalActivityPage active={activePage === "activity"} />
+            <PortalActivityPage
+              active={activePage === "activity"}
+              environments={environments}
+              refreshKey={dataRefreshKey}
+            />
           </div>
           )}
 

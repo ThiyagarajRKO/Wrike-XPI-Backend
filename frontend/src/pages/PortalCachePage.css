@@ -1,0 +1,84 @@
+/* Portal Cache Settings page.
+   The admin console's cache page is a card wrapping the shared DataTable
+   (frontend/src/pages/admin/CacheTable.tsx), and so is this one — DataTable,
+   useTable, RowMenu and Badge are shared components that bring their own
+   styles. The only page-specific chrome is the key/value presentation in the
+   detail modal, so that is all this file defines (`pca-` prefix).
+
+   Colours come from the portal shell's tokens (PortalHome.css). */
+
+/* A long Redis key: monospace, one line, ellipsised. The full value lives in
+   the title attribute and in the detail modal. */
+.pca-key {
+  font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  max-width: 320px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  display: inline-block;
+}
+
+/* Sits in the DataTable toolbar — a quiet count / active-pattern note. */
+.pca-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.pca-meta code {
+  font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+}
+
+/* ── Detail modal ───────────────────────────────────────────────────── */
+
+.pca-detail-meta {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pca-detail-meta dt {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.pca-detail-meta dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.pca-detail-meta code {
+  font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
+  font-size: 12px;
+}
+
+.pca-value {
+  max-height: 42vh;
+  overflow: auto;
+  margin: 0;
+  font-family: "Consolas", "SFMono-Regular", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pca-modal-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+}

@@ -1,7 +1,10 @@
 import { adminFetch } from "./authApi";
+import { portalFetch } from "./portalAuthApi";
 
 /* ── Types ──────────────────────────────────────────────────────────────
-   Mirrors /api/v1/admin/environment-access/* (src/routes/admin/environmentAccess). */
+   Mirrors /api/v1/admin/environment-access/* (src/routes/admin/environmentAccess)
+   and, read-side only, /api/v1/portal/environment-access/*
+   (src/routes/portal/environmentAccess). */
 
 export type RuleType = "email" | "domain" | "ip";
 
@@ -55,14 +58,43 @@ export interface CheckResult {
 
 /* ── Transport ──────────────────────────────────────────────────────── */
 
-const BASE = "/api/v1/admin/environment-access";
+const ADMIN_BASE = "/api/v1/admin/environment-access";
+const PORTAL_BASE = "/api/v1/portal/environment-access";
+
+/**
+ * Explicit per-call transport, not module state: every exported function
+ * below takes an optional trailing `Transport`, defaulting to the admin
+ * console's own (adminFetch reads its stored token internally) so every
+ * existing admin call site — none of which pass this — keeps working
+ * unchanged. The portal's read-only environment-access view (rendered
+ * through the same <EnvironmentAccess /> component, canWrite=false) passes
+ * `{ surface: "portal", token }` on every call — see
+ * PortalEnvironmentAccess.tsx. Kept explicit rather than a module-level
+ * "current surface" so admin and portal usage can never bleed into each
+ * other regardless of render order.
+ */
+export interface Transport {
+  surface: "admin" | "portal";
+  /** Required when surface is "portal" (portalFetch needs it explicitly). */
+  token?: string | null;
+}
+
+const ADMIN_TRANSPORT: Transport = { surface: "admin" };
 
 async function parseJson(res: Response): Promise<any> {
   return res.json().catch(() => null);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await adminFetch(`${BASE}${path}`, init);
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  transport: Transport = ADMIN_TRANSPORT,
+): Promise<T> {
+  const base = transport.surface === "portal" ? PORTAL_BASE : ADMIN_BASE;
+  const res =
+    transport.surface === "portal"
+      ? await portalFetch(`${base}${path}`, transport.token || "", init)
+      : await adminFetch(`${base}${path}`, init);
   const json = await parseJson(res);
 
   if (!res.ok || json?.success === false) {
@@ -78,27 +110,30 @@ const jsonBody = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-/** The IP the server sees this admin's request from — the exact value the
+/** The IP the server sees this caller's request from — the exact value the
     real IP allow-list gate reads, so "Use my IP" always fills in something
     that would actually match if saved as-is. */
-export const getMyIp = () => request<{ ip: string | null }>("/my-ip");
+export const getMyIp = (t?: Transport) => request<{ ip: string | null }>("/my-ip", undefined, t);
 
-export const getAccessSummary = () =>
-  request<Record<string, AccessSummaryRow>>("/summary").then((rows) => rows || {});
+export const getAccessSummary = (t?: Transport) =>
+  request<Record<string, AccessSummaryRow>>("/summary", undefined, t).then((rows) => rows || {});
 
-export const listRules = (envId: string) =>
-  request<AccessRule[]>(`/rules?env_id=${encodeURIComponent(envId)}`).then(
+export const listRules = (envId: string, t?: Transport) =>
+  request<AccessRule[]>(`/rules?env_id=${encodeURIComponent(envId)}`, undefined, t).then(
     (rows) => rows || [],
   );
 
-export const createRule = (payload: {
-  env_id: string;
-  rule_type: RuleType;
-  value: string;
-  label?: string | null;
-  applies_to?: AppliesTo;
-  is_enabled?: boolean;
-}) => request<AccessRule>("/rules", jsonBody("POST", payload));
+export const createRule = (
+  payload: {
+    env_id: string;
+    rule_type: RuleType;
+    value: string;
+    label?: string | null;
+    applies_to?: AppliesTo;
+    is_enabled?: boolean;
+  },
+  t?: Transport,
+) => request<AccessRule>("/rules", jsonBody("POST", payload), t);
 
 export const updateRule = (
   id: string,
@@ -108,16 +143,18 @@ export const updateRule = (
     applies_to?: AppliesTo;
     is_enabled?: boolean;
   },
-) => request<AccessRule>(`/rules/${id}`, jsonBody("PUT", payload));
+  t?: Transport,
+) => request<AccessRule>(`/rules/${id}`, jsonBody("PUT", payload), t);
 
-export const deleteRule = (id: string) =>
-  request<null>(`/rules/${id}`, { method: "DELETE" });
+export const deleteRule = (id: string, t?: Transport) =>
+  request<null>(`/rules/${id}`, { method: "DELETE" }, t);
 
 export const checkAccess = (
   env_id: string,
   email: string,
   ip: string,
   surface: Surface = "api",
+  t?: Transport,
 ) =>
   request<CheckResult>(
     "/check",
@@ -127,6 +164,7 @@ export const checkAccess = (
       ip: ip || undefined,
       surface,
     }),
+    t,
   );
 
 /* ── Shaping helpers ───────────────────────────────────────────────── */

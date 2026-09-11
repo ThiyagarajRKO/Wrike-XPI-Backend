@@ -175,6 +175,11 @@ export interface PortalEnvironmentFull {
   campaign_space_id: string;
   is_active: boolean;
   is_visible: boolean;
+  /** Gate 1 master switch — email/domain/IP allow list. Read by the
+      environment-access drawer (rendered read-only for a portal user). */
+  allowlist_check_enabled: boolean;
+  /** Gate 2 master switch — Wrike Xtend API custom field (flag only, phase 2). */
+  custom_field_check_enabled: boolean;
   created_at: string | null;
   updated_at: string | null;
 }

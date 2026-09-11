@@ -33,6 +33,13 @@ export const GetMyEnvironments = (portalUser) => {
         campaign_space_id: env.campaign_space_id || null,
         is_active: env.is_active,
         is_visible: env.is_visible,
+        // Read by the portal's environment-access drawer (EnvironmentAccess
+        // canWrite=false) to show the two gate switches in their real state
+        // — omitting them would render both as unchecked regardless of the
+        // actual value, which is misleading on a page whose whole point is
+        // showing access scope accurately.
+        allowlist_check_enabled: env.allowlist_check_enabled !== false,
+        custom_field_check_enabled: !!env.custom_field_check_enabled,
         created_at: env.created_at,
         updated_at: env.updated_at,
       }));

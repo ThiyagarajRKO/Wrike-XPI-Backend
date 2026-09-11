@@ -16,9 +16,20 @@ import {
   type CheckResult,
   type RuleType,
   type Surface,
+  type Transport,
 } from "../lib/environmentAccessApi";
-import { toggleEnvironmentStatus, type AdminEnvironment } from "../lib/adminApi";
+import { toggleEnvironmentStatus } from "../lib/adminApi";
 import { confirmDanger, escHtml, toast } from "../lib/notify";
+
+/** The only two fields this component reads off the environment record —
+    both AdminEnvironment (frontend/src/lib/adminApi.ts) and
+    PortalEnvironmentFull (frontend/src/lib/portalAuthApi.ts) satisfy this
+    structurally, so either can be passed as `environment` without one
+    module importing the other's type. */
+interface EnvironmentGateFlags {
+  allowlist_check_enabled: boolean;
+  custom_field_check_enabled: boolean;
+}
 import "./EnvironmentAccess.css";
 
 type TabId = "allowlist" | "check";
@@ -235,11 +246,23 @@ interface Props {
   envName: string | null;
   /** The full environment record — carries the two security switches below.
       Null for one tick while the parent's own list is still loading. */
-  environment: AdminEnvironment | null;
+  environment: EnvironmentGateFlags | null;
   open: boolean;
   onClose: () => void;
   /** Lets the parent refresh its own row badge after a write. */
   onChanged?: () => void;
+  /** True for the admin console (default). A caller with only read access —
+      e.g. the portal's environment_access:read-but-not-write case — passes
+      false, which hides every write affordance (both switches, Add entry,
+      the applies-to picker and enable/disable switch per row, Remove) while
+      leaving the list, filters, search and the Check simulator fully
+      functional. Server-side permission checks are the real gate; this only
+      keeps the UI from offering a control that would 403. */
+  canWrite?: boolean;
+  /** Which API surface to call. Defaults to the admin transport, matching
+      every existing admin call site (none of which pass this). The portal
+      passes { surface: "portal", token }. */
+  transport?: Transport;
 }
 
 /**
@@ -259,6 +282,8 @@ export default function EnvironmentAccess({
   open,
   onClose,
   onChanged,
+  canWrite = true,
+  transport,
 }: Props) {
   const [switchBusy, setSwitchBusy] = useState<
     "allowlist_check_enabled" | "custom_field_check_enabled" | null
@@ -268,7 +293,7 @@ export default function EnvironmentAccess({
     field: "allowlist_check_enabled" | "custom_field_check_enabled",
     next: boolean,
   ) => {
-    if (!envId) return;
+    if (!envId || !canWrite) return;
 
     // Turning the allow-list gate off is the one switch that can genuinely
     // open an environment up — confirm before it takes effect, the same
@@ -341,7 +366,7 @@ export default function EnvironmentAccess({
   const useMyIp = async () => {
     setFillingMyIp(true);
     try {
-      const { ip } = await getMyIp();
+      const { ip } = await getMyIp(transport);
       if (!ip) {
         toast("Could not detect your IP", "error");
         return;
@@ -369,14 +394,14 @@ export default function EnvironmentAccess({
     }
     setLoading(true);
     try {
-      setRules(await listRules(envId));
+      setRules(await listRules(envId, transport));
     } catch (err: any) {
       toast(err?.message || "Could not load the allow list", "error");
       setRules([]);
     } finally {
       setLoading(false);
     }
-  }, [envId]);
+  }, [envId, transport]);
 
   useEffect(() => {
     if (open && envId) {
@@ -457,10 +482,11 @@ export default function EnvironmentAccess({
   }, [load, onChanged]);
 
   const toggleEnabled = async (rule: AccessRule) => {
+    if (!canWrite) return;
     const next = !rule.is_enabled;
     setRules((rows) => rows.map((r) => (r.id === rule.id ? { ...r, is_enabled: next } : r)));
     try {
-      await updateRule(rule.id, { is_enabled: next });
+      await updateRule(rule.id, { is_enabled: next }, transport);
       toast(
         next ? `${rule.value} can be used again` : `${rule.value} is switched off`,
         next ? "success" : "warning",
@@ -473,6 +499,7 @@ export default function EnvironmentAccess({
   };
 
   const removeRule = async (rule: AccessRule) => {
+    if (!canWrite) return;
     const ok = await confirmDanger({
       title: "Remove from allow list?",
       html: `<strong>${escHtml(
@@ -483,7 +510,7 @@ export default function EnvironmentAccess({
     if (!ok) return;
 
     try {
-      await deleteRule(rule.id);
+      await deleteRule(rule.id, transport);
       toast("Removed from the allow list", "success");
       await afterWrite();
     } catch (err: any) {
@@ -492,6 +519,7 @@ export default function EnvironmentAccess({
   };
 
   const openAdd = () => {
+    if (!canWrite) return;
     setAddType("email");
     setAddValue("");
     setAddLabel("");
@@ -504,10 +532,11 @@ export default function EnvironmentAccess({
      Optimistic, and rolled back if the write fails, matching how the
      enable/disable switch on the same row behaves. */
   const changeAppliesTo = async (rule: AccessRule, next: AppliesTo) => {
+    if (!canWrite) return;
     const previous = rule.applies_to;
     setRules((rows) => rows.map((r) => (r.id === rule.id ? { ...r, applies_to: next } : r)));
     try {
-      await updateRule(rule.id, { applies_to: next });
+      await updateRule(rule.id, { applies_to: next }, transport);
       toast(`${rule.value} now applies to ${appliesToLabel(next)}`, "success");
     } catch (err: any) {
       setRules((rows) => rows.map((r) => (r.id === rule.id ? { ...r, applies_to: previous } : r)));
@@ -530,13 +559,16 @@ export default function EnvironmentAccess({
 
     setSaving(true);
     try {
-      await createRule({
-        env_id: envId,
-        rule_type: addType,
-        value,
-        label: addLabel.trim() || null,
-        applies_to: addAppliesTo,
-      });
+      await createRule(
+        {
+          env_id: envId,
+          rule_type: addType,
+          value,
+          label: addLabel.trim() || null,
+          applies_to: addAppliesTo,
+        },
+        transport,
+      );
       toast(`Added to the allow list`, "success");
       setAddOpen(false);
       await afterWrite();
@@ -556,7 +588,7 @@ export default function EnvironmentAccess({
     setCheckBusy(true);
     try {
       setCheckResult(
-        await checkAccess(envId, checkEmail.trim(), checkIp.trim(), checkSurface),
+        await checkAccess(envId, checkEmail.trim(), checkIp.trim(), checkSurface, transport),
       );
     } catch (err: any) {
       toast(err?.message || "Could not run the check", "error");
@@ -615,7 +647,7 @@ export default function EnvironmentAccess({
                 <input
                   type="checkbox"
                   checked={!!environment?.allowlist_check_enabled}
-                  disabled={!environment || switchBusy !== null}
+                  disabled={!environment || switchBusy !== null || !canWrite}
                   aria-label="Allow-list check"
                   onChange={(e) =>
                     toggleSwitch("allowlist_check_enabled", e.target.checked)
@@ -634,7 +666,7 @@ export default function EnvironmentAccess({
                 <input
                   type="checkbox"
                   checked={!!environment?.custom_field_check_enabled}
-                  disabled={!environment || switchBusy !== null}
+                  disabled={!environment || switchBusy !== null || !canWrite}
                   aria-label="Custom field check (phase 2)"
                   onChange={(e) =>
                     toggleSwitch("custom_field_check_enabled", e.target.checked)
@@ -721,10 +753,12 @@ export default function EnvironmentAccess({
                   />
                 </FilterPopover>
 
-                <button type="button" className="btn btn-primary btn-sm" onClick={openAdd}>
-                  <i className="fa-solid fa-plus" aria-hidden="true" />
-                  &nbsp;Add entry
-                </button>
+                {canWrite && (
+                  <button type="button" className="btn btn-primary btn-sm" onClick={openAdd}>
+                    <i className="fa-solid fa-plus" aria-hidden="true" />
+                    &nbsp;Add entry
+                  </button>
+                )}
               </div>
 
               <div className="ea-table-card">
@@ -736,9 +770,11 @@ export default function EnvironmentAccess({
                         <th scope="col">Type</th>
                         <th scope="col">Applies to</th>
                         <th scope="col">Switch</th>
-                        <th scope="col" className="ea-col-actions">
-                          Actions
-                        </th>
+                        {canWrite && (
+                          <th scope="col" className="ea-col-actions">
+                            Actions
+                          </th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -766,9 +802,11 @@ export default function EnvironmentAccess({
                             <td>
                               <div className="ea-skeleton ea-skeleton-switch" />
                             </td>
-                            <td className="ea-col-actions">
-                              <div className="ea-skeleton ea-skeleton-btn" />
-                            </td>
+                            {canWrite && (
+                              <td className="ea-col-actions">
+                                <div className="ea-skeleton ea-skeleton-btn" />
+                              </td>
+                            )}
                           </tr>
                         ))}
 
@@ -801,38 +839,43 @@ export default function EnvironmentAccess({
                                 idPrefix={`surface-${rule.id}`}
                                 value={rule.applies_to}
                                 onChange={(next) => changeAppliesTo(rule, next)}
-                                disabled={!rule.is_enabled}
+                                disabled={!rule.is_enabled || !canWrite}
                               />
                             </td>
                             <td>
                               <label
                                 className="toggle-wrap"
                                 title={
-                                  rule.is_enabled
-                                    ? "Switch off to block this entry without deleting it"
-                                    : "Switch on to restore access"
+                                  !canWrite
+                                    ? "Read-only"
+                                    : rule.is_enabled
+                                      ? "Switch off to block this entry without deleting it"
+                                      : "Switch on to restore access"
                                 }
                               >
                                 <input
                                   type="checkbox"
                                   checked={rule.is_enabled}
+                                  disabled={!canWrite}
                                   aria-label={`Access via ${rule.value}`}
                                   onChange={() => toggleEnabled(rule)}
                                 />
                                 <div className="toggle-track" />
                               </label>
                             </td>
-                            <td className="ea-col-actions">
-                              <button
-                                type="button"
-                                className="ea-icon-btn ea-danger"
-                                title="Remove entry"
-                                aria-label={`Remove ${rule.value}`}
-                                onClick={() => removeRule(rule)}
-                              >
-                                <i className="fa-solid fa-trash" />
-                              </button>
-                            </td>
+                            {canWrite && (
+                              <td className="ea-col-actions">
+                                <button
+                                  type="button"
+                                  className="ea-icon-btn ea-danger"
+                                  title="Remove entry"
+                                  aria-label={`Remove ${rule.value}`}
+                                  onClick={() => removeRule(rule)}
+                                >
+                                  <i className="fa-solid fa-trash" />
+                                </button>
+                              </td>
+                            )}
                           </tr>
                         ))}
                     </tbody>
@@ -846,14 +889,19 @@ export default function EnvironmentAccess({
                     </div>
                     <div className="ea-empty-title">Nobody can call this environment yet</div>
                     <div className="ea-empty-desc">
-                      Until an entry is added here, every API and MCP request to{" "}
-                      {envName || "this environment"} is refused. Add an email, a whole company
-                      domain, or an office IP range to get started.
+                      {canWrite
+                        ? <>Until an entry is added here, every API and MCP request to{" "}
+                            {envName || "this environment"} is refused. Add an email, a whole
+                            company domain, or an office IP range to get started.</>
+                        : <>Until an entry is added here, every API and MCP request to{" "}
+                            {envName || "this environment"} is refused.</>}
                     </div>
-                    <button type="button" className="btn btn-primary btn-sm" onClick={openAdd}>
-                      <i className="fa-solid fa-plus" aria-hidden="true" />
-                      &nbsp;Add the first entry
-                    </button>
+                    {canWrite && (
+                      <button type="button" className="btn btn-primary btn-sm" onClick={openAdd}>
+                        <i className="fa-solid fa-plus" aria-hidden="true" />
+                        &nbsp;Add the first entry
+                      </button>
+                    )}
                   </div>
                 )}
 

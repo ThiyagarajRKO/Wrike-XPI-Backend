@@ -19,8 +19,12 @@ export interface PortalEnvironmentsTableProps {
   loading: boolean;
   canUpdate: boolean;
   canDelete: boolean;
+  /** environment_access:read — shows the "API access scope" row action,
+      matching the admin table's shield-icon button (see AdminDashboard.tsx). */
+  canSeeAccess: boolean;
   onEdit: (env: PortalEnvironmentFull) => void;
   onDelete: (env: PortalEnvironmentFull) => void;
+  onManageAccess: (env: PortalEnvironmentFull) => void;
   onAdd: () => void;
 }
 
@@ -34,8 +38,10 @@ export function PortalEnvironmentsTable({
   loading,
   canUpdate,
   canDelete,
+  canSeeAccess,
   onEdit,
   onDelete,
+  onManageAccess,
   onAdd,
 }: PortalEnvironmentsTableProps) {
   const columns = useMemo<ColumnDef<PortalEnvironmentFull>[]>(() => {
@@ -99,7 +105,7 @@ export function PortalEnvironmentsTable({
     // Actions column only exists at all if there's at least one action this
     // user can take — an empty RowMenu with zero items would just be a
     // trigger that opens nothing.
-    if (canUpdate || canDelete) {
+    if (canUpdate || canDelete || canSeeAccess) {
       cols.push({
         id: "actions",
         header: "Actions",
@@ -111,6 +117,15 @@ export function PortalEnvironmentsTable({
           <RowMenu
             label={`Actions for ${env.environment_name}`}
             items={[
+              ...(canSeeAccess
+                ? [
+                    {
+                      label: "API Access Scope",
+                      icon: "fa-solid fa-shield-halved",
+                      onSelect: () => onManageAccess(env),
+                    },
+                  ]
+                : []),
               ...(canUpdate
                 ? [
                     {
@@ -137,7 +152,7 @@ export function PortalEnvironmentsTable({
     }
 
     return cols;
-  }, [canUpdate, canDelete, onEdit, onDelete]);
+  }, [canUpdate, canDelete, canSeeAccess, onEdit, onDelete, onManageAccess]);
 
   const table = useTable({
     data: environments,

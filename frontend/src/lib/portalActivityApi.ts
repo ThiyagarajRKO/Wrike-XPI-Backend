@@ -37,6 +37,10 @@ export interface PortalActivitySummary {
   denied: number;
 }
 
+export interface PortalActivityConfig {
+  retention_days: number;
+}
+
 export interface PortalActivityFilters {
   env_id?: string;
   actor_email?: string;
@@ -73,6 +77,11 @@ const qs = (filters: PortalActivityFilters): string =>
 
 export const getPortalActivitySummary = (token: string, envId?: string) =>
   request<PortalActivitySummary>(token, `/summary${toQueryString({ env_id: envId })}`);
+
+/** GET /api/v1/portal/activity-logs/config — how long rows are kept, so the
+    page can show the same retention note the admin console does. */
+export const getPortalActivityConfig = (token: string) =>
+  request<PortalActivityConfig>(token, "/config");
 
 export const listPortalActivity = (token: string, filters: PortalActivityFilters = {}) =>
   request<PortalActivityList>(token, qs(filters));

@@ -3,6 +3,7 @@ import { portalUsersRoute } from "./users";
 import { portalEnvironmentsRoute } from "./environments";
 import { portalActivityRoute } from "./activity";
 import { portalCacheRoute } from "./cache";
+import { portalEnvironmentAccessRoute } from "./environmentAccess";
 
 // Page handlers
 const PortalIndexPage = (req, reply) => reply.redirect("/portal/login");
@@ -67,6 +68,7 @@ export const portalApiRoute = (fastify, opts, done) => {
   fastify.register(portalEnvironmentsRoute, { prefix: "/environments" });
   fastify.register(portalActivityRoute, { prefix: "/activity-logs" });
   fastify.register(portalCacheRoute, { prefix: "/cache" });
+  fastify.register(portalEnvironmentAccessRoute, { prefix: "/environment-access" });
 
   done();
 };
