@@ -1,34 +1,54 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { CacheEntry } from "../../lib/adminApi";
-import { DataTable } from "../../components/ui/DataTable";
-import { useTable, type ColumnDef } from "../../components/ui/useTable";
-import { Badge } from "../../components/ui/Badge";
-import { formatBytes } from "../../lib/format";
+import { DataTable } from "./ui/DataTable";
+import { useTable, type ColumnDef } from "./ui/useTable";
+import { Badge } from "./ui/Badge";
+import { formatBytes } from "../lib/format";
 
-/* The Redis cache table.
+/* The Redis cache table — shared, rather than copied, by the admin console's
+ * Cache Settings page (frontend/src/pages/AdminDashboard.tsx) and the portal's
+ * (frontend/src/pages/PortalCachePage.tsx). Both render the identical table,
+ * so there is one definition of what "the cache table" looks like.
  *
- * Unlike the other two, this one searches on the SERVER: the pattern is a
- * Redis key glob, so filtering client-side would only ever narrow the page
- * already fetched. useTable therefore runs with clientSearch:false and this
- * component debounces the search box into onSearch().
+ * It searches on the SERVER: the pattern is a Redis key glob, so filtering
+ * client-side would only ever narrow the page already fetched. useTable
+ * therefore runs with clientSearch:false and this component debounces the
+ * search box into onSearch().
  *
  * That used to be done by reaching into the DataTables-generated search
  * input after init, stripping its ".DT" handlers, rebinding a custom one and
- * re-applying a dozen autocomplete-suppressing attributes by hand. */
+ * re-applying a dozen autocomplete-suppressing attributes by hand.
+ *
+ * canDelete gates the destructive half: the admin console always has it, a
+ * portal user only when their permission matrix grants "cache:delete".
+ * Without it the table is a read-only inspector — no selection column, no
+ * per-row delete — and the caller should not render a bulk-delete control
+ * either.
+ */
 
 const SEARCH_DEBOUNCE_MS = 350;
 
-export interface CacheTableProps {
-  entries: CacheEntry[];
+/** The fields this table needs. Both the admin's CacheEntry and the portal's
+    PortalCacheEntry satisfy it. */
+export interface CacheEntryLike {
+  key: string;
+  redis_type: string;
+  ttl_label: string;
+  size_bytes: number;
+}
+
+export interface CacheTableProps<T extends CacheEntryLike> {
+  entries: T[];
   loading: boolean;
   selectedKeys: Set<string>;
   onSelectionChange: (next: Set<string>) => void;
   onView: (key: string) => void;
   onDelete: (key: string) => void;
   onSearch: (pattern: string) => void;
+  /** Shows the selection column and each row's Delete button. */
+  canDelete?: boolean;
 }
 
-export function CacheTable({
+export function CacheTable<T extends CacheEntryLike>({
   entries,
   loading,
   selectedKeys,
@@ -36,7 +56,8 @@ export function CacheTable({
   onView,
   onDelete,
   onSearch,
-}: CacheTableProps) {
+  canDelete = true,
+}: CacheTableProps<T>) {
   const allSelected = entries.length > 0 && selectedKeys.size === entries.length;
   const someSelected = selectedKeys.size > 0 && !allSelected;
 
@@ -51,9 +72,13 @@ export function CacheTable({
     onSelectionChange(next);
   };
 
-  const columns = useMemo<ColumnDef<CacheEntry>[]>(
-    () => [
-      {
+  const columns = useMemo<ColumnDef<T>[]>(() => {
+    const cols: ColumnDef<T>[] = [];
+
+    // Selection only means something when there is a destructive action to
+    // apply it to.
+    if (canDelete) {
+      cols.push({
         id: "select",
         width: "42px",
         align: "center",
@@ -78,7 +103,10 @@ export function CacheTable({
             aria-label={`Select ${entry.key}`}
           />
         ),
-      },
+      });
+    }
+
+    cols.push(
       {
         id: "key",
         header: "Key",
@@ -111,7 +139,7 @@ export function CacheTable({
       {
         id: "actions",
         header: "Actions",
-        width: "120px",
+        width: canDelete ? "120px" : "64px",
         cell: (entry) => (
           <div className="cache-action-wrap">
             <button
@@ -123,23 +151,26 @@ export function CacheTable({
             >
               <i className="fa-regular fa-eye" aria-hidden="true" />
             </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm cache-delete-btn"
-              title="Delete"
-              aria-label={`Delete ${entry.key}`}
-              onClick={() => onDelete(entry.key)}
-            >
-              <i className="fa-regular fa-trash-can" aria-hidden="true" />
-            </button>
+            {canDelete && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm cache-delete-btn"
+                title="Delete"
+                aria-label={`Delete ${entry.key}`}
+                onClick={() => onDelete(entry.key)}
+              >
+                <i className="fa-regular fa-trash-can" aria-hidden="true" />
+              </button>
+            )}
           </div>
         ),
       },
-    ],
+    );
+
+    return cols;
     // toggleAll/toggleOne close over the current selection, so the columns
     // have to be rebuilt when it changes.
-    [allSelected, someSelected, selectedKeys, entries, onView, onDelete],
-  );
+  }, [canDelete, allSelected, someSelected, selectedKeys, entries, onView, onDelete]);
 
   const table = useTable({
     data: entries,

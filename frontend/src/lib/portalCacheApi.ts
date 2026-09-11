@@ -3,7 +3,7 @@ import { portalFetch } from "./portalAuthApi";
 /* ── Types ──────────────────────────────────────────────────────────────
    Mirrors /api/v1/portal/cache/* (src/routes/portal/cache/index.js), the
    portal counterpart of the admin cache API in frontend/src/lib/adminApi.ts —
-   browse, inspect, and single-key delete (no bulk-delete on the portal side). */
+   browse, inspect, single-key delete and bulk delete. */
 
 export interface PortalCacheEntry {
   key: string;
@@ -59,4 +59,22 @@ export const deletePortalCacheEntry = async (token: string, key: string): Promis
   if (!res.ok || !json?.success) {
     throw new Error(json?.message || "Failed to delete cache key");
   }
+};
+
+/** POST /api/v1/portal/cache/bulk-delete — one delMany for many keys, the
+    same call the admin console's bulk delete makes. */
+export const bulkDeletePortalCacheEntries = async (
+  token: string,
+  keys: string[],
+): Promise<{ message?: string }> => {
+  const res = await portalFetch("/api/v1/portal/cache/bulk-delete", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keys }),
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok || !json?.success) {
+    throw new Error(json?.message || "Failed to delete selected keys");
+  }
+  return json;
 };

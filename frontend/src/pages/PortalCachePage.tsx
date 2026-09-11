@@ -1,41 +1,36 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getPortalToken } from "../lib/portalAuthApi";
 import {
+  bulkDeletePortalCacheEntries,
   deletePortalCacheEntry,
   getPortalCacheDetail,
   listPortalCacheEntries,
   type PortalCacheDetail,
   type PortalCacheEntry,
 } from "../lib/portalCacheApi";
-import { DataTable } from "../components/ui/DataTable";
-import { useTable, type ColumnDef } from "../components/ui/useTable";
-import { RowMenu } from "../components/ui/RowMenu";
-import { Badge } from "../components/ui/Badge";
-import { formatBytes } from "../lib/format";
+import { CacheTable } from "../components/CacheTable";
+import { confirmDanger, escHtml, toast } from "../lib/notify";
 import "./PortalCachePage.css";
 
 /* The portal Cache Settings page.
  *
- * The same page as the admin console's Cache Settings
- * (frontend/src/pages/admin/CacheTable.tsx inside a card): the shared
- * DataTable/useTable stack, the shared RowMenu for row actions, and the same
- * key-detail modal. What differs is enforced by the portal API, not chosen
- * here:
+ * The admin console's Cache Settings page on the portal API: the same section
+ * header with the bulk-delete button, the same card, and the same shared
+ * <CacheTable /> (frontend/src/components/CacheTable.tsx) — one
+ * implementation, not two that drift. The row and bulk deletes behave exactly
+ * as the admin console's do, including the "Delete Selected (n)" /
+ * "Delete All" label.
  *
- *   - No bulk delete. src/routes/portal/cache/index.js only exposes a
- *     single-key DELETE; the "cache" portal-permission module
- *     (src/utils/portalPermissionCatalog.js) grants "read" and "delete", not
- *     a separate bulk action, so keys are cleared one at a time.
- *   - CRUD gating. "cache:read" gets the page and the View action;
- *     "cache:delete" is what adds the Delete action — to the row menu and to
- *     the detail modal. Without it the page is a browsable, read-only
- *     inspector, and no control is shown that would 403.
- *   - Server-side search, because the pattern is a Redis key glob: filtering
- *     client-side would only narrow the page already fetched, so the search
- *     box is debounced into the query exactly as the admin table's is.
+ * Permission gating, which is the only thing that differs between the two
+ * surfaces:
+ *   read   → the page, the table, the View action (and the key detail modal)
+ *   delete → the selection column, per-row Delete, Delete This Key in the
+ *            modal, and Delete Selected / Delete All
+ * Both deletes are enforced server-side as well
+ * (requirePortalPermission("cache", "delete") in
+ * src/routes/portal/cache/index.js), so a read-only portal user is never
+ * shown a control that would 403.
  */
-
-const SEARCH_DEBOUNCE_MS = 350;
 
 function safeStringify(value: unknown): string {
   try {
@@ -55,25 +50,36 @@ export default function PortalCachePage({ active, canDelete }: Props) {
   const token = getPortalToken();
 
   const [entries, setEntries] = useState<PortalCacheEntry[]>([]);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [pattern, setPattern] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Read by callbacks that must not re-create themselves on every keystroke
+  // (the post-delete reload — same reason the admin page keeps a ref here).
+  const patternRef = useRef(pattern);
+  patternRef.current = pattern;
 
   const [detailKey, setDetailKey] = useState<string | null>(null);
   const [detail, setDetail] = useState<PortalCacheDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(
-    async (nextPattern: string) => {
+    async (patternOverride?: string) => {
       if (!token) return;
+      const normalized =
+        typeof patternOverride === "string" ? patternOverride.trim() : patternRef.current;
+
+      setPattern(normalized);
       setLoading(true);
-      setError(null);
       try {
-        const data = await listPortalCacheEntries(token, nextPattern);
+        const data = await listPortalCacheEntries(token, normalized);
         setEntries(data);
+        setSelectedKeys(new Set());
       } catch (err) {
         setEntries([]);
-        setError((err as Error).message || "Failed to load cache entries");
+        setSelectedKeys(new Set());
+        toast((err as Error).message || "Failed to load cache data", "error");
       } finally {
         setLoading(false);
       }
@@ -87,6 +93,16 @@ export default function PortalCachePage({ active, canDelete }: Props) {
     load("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
+
+  /* Stable identity so <CacheTable />'s debounce effect isn't torn down and
+     rebuilt on every parent render, which would restart the timer and mean
+     the query never fires while the user keeps typing. */
+  const handleSearch = useCallback(
+    (nextPattern: string) => {
+      load(nextPattern);
+    },
+    [load],
+  );
 
   const closeDetail = useCallback(() => {
     setDetailKey(null);
@@ -104,139 +120,75 @@ export default function PortalCachePage({ active, canDelete }: Props) {
         setDetail(data);
       } catch (err) {
         setDetail(null);
-        setError((err as Error).message || "Failed to load key detail");
+        closeDetail();
+        toast((err as Error).message || "Failed to load key detail", "error");
       } finally {
         setDetailLoading(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [token],
   );
 
-  const handleDelete = useCallback(
+  const deleteKey = useCallback(
     async (key: string) => {
       if (!token || !canDelete) return;
 
-      const Swal = window.Swal;
-      const result = Swal
-        ? await Swal.fire({
-            title: "Delete this cache key?",
-            html: `<code>${key}</code> will be removed immediately. This cannot be undone.`,
-            icon: "warning",
-            showCancelButton: true,
-            confirmButtonText: "Delete",
-            cancelButtonText: "Cancel",
-            reverseButtons: true,
-            customClass: { confirmButton: "swal2-confirm swal2-danger" },
-          })
-        : { isConfirmed: true };
-
-      if (!result.isConfirmed) return;
+      const confirmed = await confirmDanger({
+        title: "Delete Cache Key?",
+        html: `This will remove <strong>${escHtml(key)}</strong> from Redis.`,
+      });
+      if (!confirmed) return;
 
       try {
         await deletePortalCacheEntry(token, key);
+        toast("Cache key deleted", "success");
         if (detailKey === key) closeDetail();
-        await load(pattern.trim());
+        await load(patternRef.current);
       } catch (err) {
-        setError((err as Error).message || "Failed to delete cache key");
+        toast((err as Error).message || "Failed to delete cache key", "error");
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [token, canDelete, detailKey, pattern, load, closeDetail],
+    [token, canDelete, detailKey, load, closeDetail],
   );
 
-  const columns = useMemo<ColumnDef<PortalCacheEntry>[]>(() => {
-    const cols: ColumnDef<PortalCacheEntry>[] = [
-      {
-        id: "key",
-        header: "Key",
-        accessor: (entry) => entry.key,
-        cell: (entry) => (
-          <span className="pca-key" title={entry.key}>
-            {entry.key}
-          </span>
-        ),
-      },
-      {
-        id: "redis_type",
-        header: "Type",
-        accessor: (entry) => entry.redis_type,
-        cell: (entry) => <Badge tone="neutral">{entry.redis_type || "unknown"}</Badge>,
-      },
-      {
-        id: "ttl",
-        header: "TTL",
-        accessor: (entry) => entry.ttl_label,
-        cell: (entry) => entry.ttl_label || "Unavailable",
-      },
-      {
-        id: "size_bytes",
-        header: "Size",
-        accessor: (entry) => entry.size_bytes,
-        cell: (entry) => formatBytes(entry.size_bytes),
-        searchable: false,
-      },
-      {
-        // Always present: every caller who can see this page holds
-        // "cache:read", so View is always an available action. Delete is
-        // appended only when the matrix grants "cache:delete".
-        id: "actions",
-        header: "Actions",
-        width: "64px",
-        align: "center",
-        cell: (entry) => (
-          <RowMenu
-            label={`Actions for ${entry.key}`}
-            items={[
-              {
-                label: "View",
-                icon: "fa-solid fa-eye",
-                onSelect: () => openDetail(entry.key),
-              },
-              ...(canDelete
-                ? [
-                    {
-                      label: "Delete",
-                      icon: "fa-solid fa-trash",
-                      danger: true,
-                      onSelect: () => handleDelete(entry.key),
-                    },
-                  ]
-                : []),
-            ]}
-          />
-        ),
-      },
-    ];
+  const handleBulkDelete = async () => {
+    if (!token || !canDelete) return;
 
-    return cols;
-  }, [canDelete, openDetail, handleDelete]);
+    // Same rule as the admin console: a selection means "these", no selection
+    // means "everything currently listed".
+    const keys = selectedKeys.size > 0 ? Array.from(selectedKeys) : entries.map((e) => e.key);
+    if (!keys.length) return;
 
-  const table = useTable({
-    data: entries,
-    columns,
-    getRowId: (entry) => entry.key,
-    initialPageSize: 10,
-    clientSearch: false,
-  });
+    const isDeleteAll = selectedKeys.size === 0;
+    const confirmed = await confirmDanger({
+      title: isDeleteAll ? "Delete All Cache Keys?" : "Delete Selected Cache Keys?",
+      html: `You are deleting <strong>${keys.length}</strong> key(s).`,
+      confirmText: isDeleteAll ? "Delete All" : "Delete Selected",
+    });
+    if (!confirmed) return;
 
-  /* Debounce the search box into the server query. The ref guard keeps the
-     first render from firing a redundant fetch for the empty pattern the
-     activation effect has already loaded. */
-  const { search } = table;
-  const primedRef = useRef(false);
-
-  useEffect(() => {
-    if (!active) return;
-    if (!primedRef.current) {
-      primedRef.current = true;
-      return;
+    setBulkDeleting(true);
+    try {
+      const json = await bulkDeletePortalCacheEntries(token, keys);
+      toast(json?.message || "Cache keys deleted", "success");
+      await load(patternRef.current);
+    } catch (err) {
+      toast((err as Error).message || "Bulk delete failed", "error");
+    } finally {
+      setBulkDeleting(false);
     }
-    const timer = window.setTimeout(() => {
-      setPattern(search.trim());
-      load(search.trim());
-    }, SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [search, load, active]);
+  };
+
+  const cacheAllCount = entries.length;
+  const cacheSelectedCount = selectedKeys.size;
+  const bulkDeleteLabel =
+    cacheAllCount === 0
+      ? "Delete All"
+      : cacheSelectedCount > 0
+        ? `Delete Selected (${cacheSelectedCount})`
+        : "Delete All";
 
   return (
     <>
@@ -245,62 +197,44 @@ export default function PortalCachePage({ active, canDelete }: Props) {
           <div className="section-title">Cache Settings</div>
           <div className="section-subtitle">
             {canDelete
-              ? "Browse and clear cached Redis keys"
+              ? "Manage cache keys and inspect Redis data"
               : "Read-only view of cached Redis keys"}
           </div>
         </div>
+        {canDelete && (
+          <button
+            className="btn btn-danger"
+            disabled={cacheAllCount === 0 || bulkDeleting}
+            onClick={handleBulkDelete}
+          >
+            <i className="fa-solid fa-trash" /> {bulkDeleteLabel}
+          </button>
+        )}
       </div>
 
       <div className="card">
         <div className="card-body">
-          <DataTable
-            table={table}
-            caption="Cache keys"
+          <CacheTable
+            entries={entries}
             loading={loading}
-            pageSizeOptions={[10, 25, 50, 100]}
-            searchPlaceholder="Search cache keys or patterns…"
-            toolbar={
-              <span className="pca-meta">
-                {entries.length} key{entries.length === 1 ? "" : "s"}
-                {pattern ? (
-                  <>
-                    {" "}
-                    matching <code>{pattern}</code>
-                  </>
-                ) : null}
-              </span>
-            }
-            empty={
-              error ? (
-                <div className="dt2-empty">
-                  <div className="dt2-empty-icon">
-                    <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
-                  </div>
-                  <h3>Couldn't load cache entries</h3>
-                  <p>{error}</p>
-                </div>
-              ) : (
-                <div className="dt2-empty">
-                  <div className="dt2-empty-icon">
-                    <i className="fa-solid fa-database" aria-hidden="true" />
-                  </div>
-                  <h3>No cache entries</h3>
-                  <p>Nothing is cached for this pattern right now.</p>
-                </div>
-              )
-            }
+            selectedKeys={selectedKeys}
+            onSelectionChange={setSelectedKeys}
+            canDelete={canDelete}
+            onView={openDetail}
+            onDelete={deleteKey}
+            onSearch={handleSearch}
           />
         </div>
       </div>
 
-      {/* ════════════ KEY DETAIL MODAL ════════════ */}
+      {/* ════════════ CACHE DETAIL MODAL ════════════ */}
       <div
         className={`modal-backdrop${detailKey ? " open" : ""}`}
         onClick={(e) => {
           if (e.target === e.currentTarget) closeDetail();
         }}
       >
-        <div className="modal" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal" role="dialog" aria-modal="true" style={{ maxWidth: 760 }} onClick={(e) => e.stopPropagation()}>
           <div className="modal-header">
             <div className="modal-title">
               <i className="fa-solid fa-database" />
@@ -312,36 +246,33 @@ export default function PortalCachePage({ active, canDelete }: Props) {
           </div>
 
           <div className="modal-body">
-            {detailLoading && <p className="pca-modal-loading">Loading…</p>}
-
-            {!detailLoading && detail && (
-              <>
-                <dl className="pca-detail-meta">
-                  <div>
-                    <dt>Key</dt>
-                    <dd>
-                      <code>{detail.key}</code>
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Type</dt>
-                    <dd>
-                      {detail.redis_type || "unknown"} / {detail.value_type || "unknown"}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>TTL</dt>
-                    <dd>{detail.ttl_label || "Unavailable"}</dd>
-                  </div>
-                </dl>
-                <pre className="pca-value">{safeStringify(detail.value)}</pre>
-              </>
-            )}
+            <div style={{ display: "grid", gap: 10, marginBottom: 14 }}>
+              <div>
+                <strong>Key:</strong> <span>{detailKey || "—"}</span>
+              </div>
+              <div>
+                <strong>Type:</strong>{" "}
+                <span>
+                  {detail
+                    ? `${detail.redis_type || "unknown"} / ${detail.value_type || "unknown"}`
+                    : detailLoading
+                      ? "Loading…"
+                      : "—"}
+                </span>
+                <span style={{ marginLeft: 12 }}>
+                  <strong>TTL:</strong>{" "}
+                  <span>{detail ? detail.ttl_label || "Unavailable" : detailLoading ? "Loading…" : "—"}</span>
+                </span>
+              </div>
+            </div>
+            <div className="cache-value">
+              {detail ? safeStringify(detail.value) : detailLoading ? "Loading…" : "—"}
+            </div>
           </div>
 
           <div className="modal-footer" style={{ justifyContent: "space-between" }}>
             {canDelete && detailKey ? (
-              <button className="btn btn-danger" onClick={() => handleDelete(detailKey)}>
+              <button className="btn btn-danger" onClick={() => deleteKey(detailKey)}>
                 <i className="fa-solid fa-trash" /> Delete This Key
               </button>
             ) : (

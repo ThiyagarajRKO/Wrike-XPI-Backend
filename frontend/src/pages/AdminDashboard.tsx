@@ -1,4 +1,4 @@
-import { CacheTable } from "./admin/CacheTable";
+import { CacheTable } from "../components/CacheTable";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { adminLogout, clearAdminSession, getAccessToken } from "../lib/authApi";
 import { fetchAppConfig, DEFAULT_CONFIG, type AppConfig } from "../lib/appConfig";

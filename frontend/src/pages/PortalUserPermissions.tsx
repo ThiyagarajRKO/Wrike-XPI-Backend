@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   getPermissionCatalog,
   getUserPermissions,
@@ -18,12 +18,19 @@ const ACTION_LABEL: Record<ActionName, string> = {
   delete: "Delete",
 };
 
-const ACTIONS: ActionName[] = ["read", "create", "update", "delete"];
+/** Column order used until the catalogue lands (and if it never does). The
+    catalogue's own `actions` list is what actually decides the columns once
+    it arrives — see `actions` below. */
+const DEFAULT_ACTIONS: ActionName[] = ["read", "create", "update", "delete"];
+
+const actionLabel = (action: ActionName) => ACTION_LABEL[action] || action;
 
 const MODULE_ICON: Record<string, string> = {
   overview: "fa-chart-pie",
   environments: "fa-layer-group",
   environment_access: "fa-shield-halved",
+  activity_logs: "fa-clock-rotate-left",
+  cache: "fa-database",
 };
 
 interface Props {
@@ -35,10 +42,15 @@ interface Props {
 
 /**
  * Compact module-permission editor for one portal user — Read/Create/Update/
- * Delete per module, opened directly from that user's row (no separate
- * page). A small modal rather than a drawer: three modules by four actions
- * is twelve cells, which fits comfortably without needing the extra screen
- * real estate a slide-over reserves.
+ * Delete per module, opened directly from that user's row (no separate page).
+ * A small modal rather than a drawer: one row per module and one column per
+ * action is small enough to fit without the extra screen real estate a
+ * slide-over reserves.
+ *
+ * Every cell is driven by the server catalogue. A module only offers the
+ * actions it declares there, which is how "Cache Settings" gets a Delete
+ * checkbox while "Activity Logs" stays read-only — the frontend never
+ * decides what a module can express, so the two can't drift apart.
  */
 export default function PortalUserPermissions({ userId, username, open, onClose }: Props) {
   const [catalog, setCatalog] = useState<PermissionCatalog | null>(null);
@@ -50,7 +62,15 @@ export default function PortalUserPermissions({ userId, username, open, onClose 
   useEffect(() => {
     if (!open) return;
 
-    if (!catalog) getPermissionCatalog().then(setCatalog).catch(() => {});
+    // Re-fetch on EVERY open, not just the first one. The catalogue is the
+    // server's (src/utils/portalPermissionCatalog.js) and can gain a module
+    // or give a module a new action while this dashboard is already loaded;
+    // holding it in state for the life of the page would keep rendering the
+    // older matrix — a Cache Settings row with no Delete column, for
+    // instance, after the server grew one.
+    getPermissionCatalog()
+      .then(setCatalog)
+      .catch(() => {});
 
     if (!userId) return;
     setLoading(true);
@@ -78,6 +98,11 @@ export default function PortalUserPermissions({ userId, username, open, onClose 
   }, [open, onClose]);
 
   const modules = catalog?.modules || [];
+
+  /* The columns ARE the server's action vocabulary — not a second copy of it.
+     If the catalogue ever adds or reorders an action, the grid follows with
+     no edit here. DEFAULT_ACTIONS only covers the moment before it arrives. */
+  const actions: ActionName[] = catalog?.actions?.length ? catalog.actions : DEFAULT_ACTIONS;
 
   const counts = useMemo(
     () => (draft ? grantedCount(draft, modules) : { granted: 0, total: 0 }),
@@ -269,12 +294,15 @@ export default function PortalUserPermissions({ userId, username, open, onClose 
                 </div>
               </div>
 
-              <div className="pup-matrix">
+              <div
+                className="pup-matrix"
+                style={{ "--pup-action-cols": actions.length } as CSSProperties}
+              >
                 <div className="pup-matrix-head" aria-hidden="true">
                   <span className="pup-matrix-head-module" />
-                  {ACTIONS.map((action) => (
+                  {actions.map((action) => (
                     <span className="pup-matrix-head-cell" key={action}>
-                      {ACTION_LABEL[action]}
+                      {actionLabel(action)}
                     </span>
                   ))}
                   <span className="pup-matrix-head-all" />
@@ -296,7 +324,7 @@ export default function PortalUserPermissions({ userId, username, open, onClose 
                         </span>
                       </div>
 
-                      {ACTIONS.map((action) => {
+                      {actions.map((action) => {
                         const supported = mod.actions.includes(action);
                         const checked = !!row?.[action];
 
@@ -308,7 +336,7 @@ export default function PortalUserPermissions({ userId, username, open, onClose 
                                   type="checkbox"
                                   checked={checked}
                                   onChange={() => toggleCell(mod.key, action)}
-                                  aria-label={`${ACTION_LABEL[action]} on ${mod.label}`}
+                                  aria-label={`${actionLabel(action)} on ${mod.label}`}
                                 />
                                 <span className="pup-tick" aria-hidden="true">
                                   <i className="fa-solid fa-check" />
@@ -317,7 +345,7 @@ export default function PortalUserPermissions({ userId, username, open, onClose 
                             ) : (
                               <span
                                 className="pup-na"
-                                title={`${mod.label} has nothing to ${action}`}
+                                title={`${mod.label} does not support ${actionLabel(action).toLowerCase()}`}
                                 aria-hidden="true"
                               >
                                 —

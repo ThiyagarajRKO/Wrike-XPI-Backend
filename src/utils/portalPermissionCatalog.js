@@ -34,19 +34,22 @@ export const MODULES = [
   {
     key: "environment_access",
     label: "Environment Access",
-    description: "The email/domain/IP allow list controlling who can call the API.",
+    description:
+      "The email/domain/IP allow list controlling who can call the API.",
     actions: ALL,
   },
   {
     key: "activity_logs",
     label: "Activity Logs",
-    description: "The API/MCP call audit trail: who called what, and whether it was allowed.",
+    description:
+      "The API/MCP call audit trail: who called what, and whether it was allowed.",
     actions: ["read"],
   },
   {
     key: "cache",
     label: "Cache Settings",
-    description: "Cached Redis keys and their values — read to browse, delete to clear a key.",
+    description:
+      "Cached Redis keys and their values — read to browse, delete to clear keys.",
     actions: ["read", "delete"],
   },
 ];
@@ -58,7 +61,10 @@ const moduleByKey = Object.fromEntries(MODULES.map((m) => [m.key, m]));
 /** An all-false matrix — the safe starting point for a user with no rows yet. */
 export const emptyMatrix = () =>
   Object.fromEntries(
-    MODULES.map((m) => [m.key, { read: false, create: false, update: false, delete: false }]),
+    MODULES.map((m) => [
+      m.key,
+      { read: false, create: false, update: false, delete: false },
+    ]),
   );
 
 /**

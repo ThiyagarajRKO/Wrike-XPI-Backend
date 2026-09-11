@@ -204,9 +204,14 @@
 }
 
 /* ── Matrix ─────────────────────────────────────────────────────────── */
-/* CSS grid, not a <table> — three modules and four actions is small enough
-   that a grid gives cleaner alignment and an easy "All/None" fifth column
-   without fighting table layout rules. */
+/* CSS grid, not a <table> — a handful of modules and four actions is small
+   enough that a grid gives cleaner alignment and an easy "All/None" fifth
+   column without fighting table layout rules.
+
+   The action-column count is not hardcoded: the component sets
+   --pup-action-cols from the server's action catalogue (see
+   PortalUserPermissions.tsx), so a module vocabulary that gains or loses an
+   action re-lays out this grid instead of overflowing it. */
 
 .pup-matrix {
   border: 1px solid var(--border);
@@ -217,7 +222,7 @@
 .pup-matrix-head,
 .pup-matrix-row {
   display: grid;
-  grid-template-columns: 1fr repeat(4, 58px) 48px;
+  grid-template-columns: 1fr repeat(var(--pup-action-cols, 4), 58px) 48px;
   align-items: center;
   column-gap: 4px;
 }
@@ -465,7 +470,7 @@
 @media (max-width: 480px) {
   .pup-matrix-head,
   .pup-matrix-row {
-    grid-template-columns: 1fr repeat(4, 38px) 34px;
+    grid-template-columns: 1fr repeat(var(--pup-action-cols, 4), 38px) 34px;
   }
   .pup-module-desc {
     display: none;
