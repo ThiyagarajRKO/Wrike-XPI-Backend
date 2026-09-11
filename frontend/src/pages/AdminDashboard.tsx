@@ -1859,6 +1859,11 @@ export default function AdminDashboard() {
                 <i className="fa-solid fa-plus-circle" /> Map another environment
               </div>
 
+              <div className="info-banner">
+                <i className="fa-solid fa-circle-info" />
+                <span>Each environment can only be mapped to one user at a time.</span>
+              </div>
+
               {puUnassignedEnvs.length ? (
                 <div style={{ display: "flex", gap: 8 }}>
                   <select
@@ -1891,16 +1896,14 @@ export default function AdminDashboard() {
               ) : (
                 <div
                   style={{
-                    padding: "12px 14px",
+                    padding: "10px 12px",
                     background: "var(--bg-surface)",
-                    border: "1px dashed var(--border)",
                     borderRadius: "var(--radius-sm)",
                     color: "var(--text-muted)",
-                    fontSize: 13,
-                    textAlign: "center",
+                    fontSize: 12.5,
                   }}
                 >
-                  <i className="fa-solid fa-circle-info" /> No more environments available to map.
+                  No unmapped environments left — every environment has a user.
                 </div>
               )}
             </div>
