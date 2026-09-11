@@ -117,3 +117,73 @@ export const verifyTotp = async (
 
   return body.data.access_token as string;
 };
+
+/* ── MFA (TOTP) self-service enrollment ─────────────────────────────────
+   Mirrors GET/POST /api/v1/admin/totp/setup, GET /api/v1/admin/totp/status,
+   and POST /api/v1/admin/totp/disable (src/routes/admin/auth/index.js). */
+
+export interface TotpSetup {
+  secret: string;
+  qrCodeUrl: string;
+  qrCodeImage: string;
+}
+
+export const getTotpStatus = async (): Promise<boolean> => {
+  const res = await adminFetch("/api/v1/admin/totp/status");
+  const body = await res.json().catch(() => null);
+
+  if (!res.ok || !body?.success) {
+    throw new Error(body?.message || "Failed to load MFA status");
+  }
+
+  return !!body.data?.totp_enabled;
+};
+
+export const getTotpSetup = async (): Promise<TotpSetup> => {
+  const res = await adminFetch("/api/v1/admin/totp/setup");
+  const body = await res.json().catch(() => null);
+
+  if (!res.ok || !body?.success) {
+    throw new Error(body?.message || "Failed to start MFA setup");
+  }
+
+  return {
+    secret: body.data.secret,
+    qrCodeUrl: body.data.qr_code_url,
+    qrCodeImage: body.data.qr_code_image,
+  };
+};
+
+export const enableTotp = async (
+  totpSecret: string,
+  totpCode: string,
+): Promise<void> => {
+  const res = await adminFetch("/api/v1/admin/totp/setup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ totp_secret: totpSecret, totp_code: totpCode }),
+  });
+
+  const body = await res.json().catch(() => null);
+
+  if (!res.ok || !body?.success) {
+    throw new Error(body?.message || "Failed to enable MFA");
+  }
+};
+
+export const disableTotp = async (
+  password: string,
+  totpCode: string,
+): Promise<void> => {
+  const res = await adminFetch("/api/v1/admin/totp/disable", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ password, totp_code: totpCode }),
+  });
+
+  const body = await res.json().catch(() => null);
+
+  if (!res.ok || !body?.success) {
+    throw new Error(body?.message || "Failed to disable MFA");
+  }
+};

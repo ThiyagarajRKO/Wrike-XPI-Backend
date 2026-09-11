@@ -74,6 +74,38 @@ export const GetById = async (id) => {
   }
 };
 
+export const GetAuthById = async (id) => {
+  try {
+    if (!id) {
+      throw {
+        statusCode: 420,
+        message: "Id must not be empty!",
+      };
+    }
+
+    const admin = await models.AdminUsers.findOne({
+      attributes: [
+        "id",
+        "username",
+        "password_hash",
+        "totp_enabled",
+        "totp_secret",
+      ],
+      where: { id, is_active: true },
+    });
+
+    return {
+      id: admin?.id,
+      username: admin?.username,
+      password_hash: admin?.password_hash,
+      totp_enabled: admin?.totp_enabled,
+      totp_secret: admin?.totp_secret,
+    };
+  } catch (err) {
+    throw err;
+  }
+};
+
 export const Count = async () => {
   try {
     return await models.AdminUsers.count();

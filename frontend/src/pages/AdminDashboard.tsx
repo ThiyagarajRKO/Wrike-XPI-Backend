@@ -28,7 +28,9 @@ import {
 } from "../lib/adminApi";
 import EnvironmentAccess from "./EnvironmentAccess";
 import PortalUserPermissions from "./PortalUserPermissions";
-import ActivityLog from "./ActivityLog";import { EnvironmentsTable } from "./admin/EnvironmentsTable";
+import ActivityLog from "./ActivityLog";
+import MfaSettings from "./MfaSettings";
+import { EnvironmentsTable } from "./admin/EnvironmentsTable";
 import { PortalUsersTable } from "./admin/PortalUsersTable";
 import EnvBadge from "../components/EnvBadge";
 import BuildTag from "../components/BuildTag";
@@ -1015,6 +1017,16 @@ export default function AdminDashboard() {
           </div>
 
           <div
+            className={`nav-item${activePage === "settings" ? " active" : ""}`}
+            onClick={() => handleNav("settings")}
+          >
+            <span className="ni">
+              <i className="fa-solid fa-shield-halved" />
+            </span>
+            <span className="nl">Security</span>
+          </div>
+
+          <div
             className={`nav-item${activePage === "cache-settings" ? " active" : ""}`}
             onClick={() => handleNav("cache-settings")}
           >
@@ -1277,13 +1289,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className="card">
-              <div className="coming-soon">
-                <div className="coming-soon-icon">
-                  <i className="fa-solid fa-sliders" />
-                </div>
-                <h2>Settings</h2>
-                <p>General system settings will be available here.</p>
-              </div>
+              <MfaSettings />
             </div>
           </div>
 
