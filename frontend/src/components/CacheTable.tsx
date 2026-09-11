@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import { DataTable } from "./ui/DataTable";
 import { useTable, type ColumnDef } from "./ui/useTable";
 import { Badge } from "./ui/Badge";
@@ -46,6 +46,9 @@ export interface CacheTableProps<T extends CacheEntryLike> {
   onSearch: (pattern: string) => void;
   /** Shows the selection column and each row's Delete button. */
   canDelete?: boolean;
+  /** Overrides the default "No cache entries" block — the portal uses it to
+      explain that it only lists entries belonging to the caller. */
+  empty?: ReactNode;
 }
 
 export function CacheTable<T extends CacheEntryLike>({
@@ -57,6 +60,7 @@ export function CacheTable<T extends CacheEntryLike>({
   onDelete,
   onSearch,
   canDelete = true,
+  empty,
 }: CacheTableProps<T>) {
   const allSelected = entries.length > 0 && selectedKeys.size === entries.length;
   const someSelected = selectedKeys.size > 0 && !allSelected;
@@ -203,13 +207,15 @@ export function CacheTable<T extends CacheEntryLike>({
       pageSizeOptions={[10, 25, 50, 100]}
       searchPlaceholder="Search cache keys or patterns…"
       empty={
-        <div className="dt2-empty">
-          <div className="dt2-empty-icon">
-            <i className="fa-solid fa-database" aria-hidden="true" />
+        empty ?? (
+          <div className="dt2-empty">
+            <div className="dt2-empty-icon">
+              <i className="fa-solid fa-database" aria-hidden="true" />
+            </div>
+            <h3>No cache entries</h3>
+            <p>Nothing is cached for this pattern right now.</p>
           </div>
-          <h3>No cache entries</h3>
-          <p>Nothing is cached for this pattern right now.</p>
-        </div>
+        )
       }
     />
   );

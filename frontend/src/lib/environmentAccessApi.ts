@@ -1,5 +1,6 @@
 import { adminFetch } from "./authApi";
 import { portalFetch } from "./portalAuthApi";
+import { toggleEnvironmentStatus } from "./adminApi";
 
 /* ── Types ──────────────────────────────────────────────────────────────
    Mirrors /api/v1/admin/environment-access/* (src/routes/admin/environmentAccess)
@@ -148,6 +149,31 @@ export const updateRule = (
 
 export const deleteRule = (id: string, t?: Transport) =>
   request<null>(`/rules/${id}`, { method: "DELETE" }, t);
+
+/**
+ * The two API-access gate switches.
+ *
+ * The admin console already had a home for these — PATCH
+ * /admin/credentials/:id/status (frontend/src/lib/adminApi.ts
+ * toggleEnvironmentStatus, which also carries is_active/is_visible) — so the
+ * admin branch keeps calling that and the console is untouched. The portal has
+ * no credentials route, so it gets its own: PATCH
+ * /portal/environment-access/gates (src/routes/portal/environmentAccess),
+ * behind the environment_access module's "update" action and scoped to
+ * environments the caller owns.
+ */
+export const setEnvironmentGates = async (
+  envId: string,
+  payload: { allowlist_check_enabled?: boolean; custom_field_check_enabled?: boolean },
+  t?: Transport,
+): Promise<void> => {
+  if (!t || t.surface === "admin") {
+    await toggleEnvironmentStatus(envId, payload);
+    return;
+  }
+
+  await request<null>("/gates", jsonBody("PATCH", { env_id: envId, ...payload }), t);
+};
 
 export const checkAccess = (
   env_id: string,

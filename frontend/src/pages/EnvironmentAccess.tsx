@@ -18,7 +18,7 @@ import {
   type Surface,
   type Transport,
 } from "../lib/environmentAccessApi";
-import { toggleEnvironmentStatus } from "../lib/adminApi";
+import { setEnvironmentGates } from "../lib/environmentAccessApi";
 import { confirmDanger, escHtml, toast } from "../lib/notify";
 
 /** The only two fields this component reads off the environment record —
@@ -33,6 +33,9 @@ interface EnvironmentGateFlags {
 import "./EnvironmentAccess.css";
 
 type TabId = "allowlist" | "check";
+
+/** The two environment-level security gates this drawer can flip. */
+type GateField = "allowlist_check_enabled" | "custom_field_check_enabled";
 
 /** Rows per page in the allow list. Small enough that the drawer never grows
     a second scrollbar of its own on a laptop screen. */
@@ -251,14 +254,19 @@ interface Props {
   onClose: () => void;
   /** Lets the parent refresh its own row badge after a write. */
   onChanged?: () => void;
-  /** True for the admin console (default). A caller with only read access —
-      e.g. the portal's environment_access:read-but-not-write case — passes
-      false, which hides every write affordance (both switches, Add entry,
-      the applies-to picker and enable/disable switch per row, Remove) while
-      leaving the list, filters, search and the Check simulator fully
-      functional. Server-side permission checks are the real gate; this only
-      keeps the UI from offering a control that would 403. */
+  /** True for the admin console (default). A caller whose access is not
+      all-or-nothing can set the three grants below instead; this one stays
+      the blanket switch, and the list, filters, search and Check simulator
+      stay fully functional either way. Server-side permission checks are the
+      real gate; this only keeps the UI from offering a control that would 403. */
   canWrite?: boolean;
+  /** Per-action grants, for a caller like the portal that holds
+      environment_access permissions separately. Each falls back to canWrite,
+      so an admin call site passing only canWrite keeps every affordance it
+      had. */
+  canCreate?: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
   /** Which API surface to call. Defaults to the admin transport, matching
       every existing admin call site (none of which pass this). The portal
       passes { surface: "portal", token }. */
@@ -283,17 +291,40 @@ export default function EnvironmentAccess({
   onClose,
   onChanged,
   canWrite = true,
+  canCreate,
+  canUpdate,
+  canDelete,
   transport,
 }: Props) {
-  const [switchBusy, setSwitchBusy] = useState<
-    "allowlist_check_enabled" | "custom_field_check_enabled" | null
-  >(null);
+  /* One flag per action, each defaulting to the blanket canWrite. Derived once
+     here rather than defaulted at every call site, so the column header, its
+     skeleton cell and the real cell can never disagree about whether a column
+     exists. */
+  const allowCreate = canCreate ?? canWrite;
+  const allowUpdate = canUpdate ?? canWrite;
+  const allowDelete = canDelete ?? canWrite;
 
-  const toggleSwitch = async (
-    field: "allowlist_check_enabled" | "custom_field_check_enabled",
-    next: boolean,
-  ) => {
-    if (!envId || !canWrite) return;
+  const [switchBusy, setSwitchBusy] = useState<GateField | null>(null);
+
+  /* The two switches are drawn from the environment record the PARENT holds,
+     and that record only catches up once the parent's own reload lands — a
+     round trip after this write. Without a local value to hold the answer, a
+     successful flip would leave the switch sitting on its old position (and
+     disabled) until then, which reads as "the write did nothing". This keeps
+     what the user just asked for until the record agrees with it. */
+  const [gateDraft, setGateDraft] = useState<Partial<Record<GateField, boolean>>>({});
+
+  const gateValue = (field: GateField) => gateDraft[field] ?? !!environment?.[field];
+
+  // Opening the drawer, or pointing it at another environment, returns the
+  // switches to the record the parent holds — the draft is only ever "the
+  // value we just wrote and are waiting to see reflected".
+  useEffect(() => {
+    setGateDraft({});
+  }, [envId, open]);
+
+  const toggleSwitch = async (field: GateField, next: boolean) => {
+    if (!envId || !allowUpdate) return;
 
     // Turning the allow-list gate off is the one switch that can genuinely
     // open an environment up — confirm before it takes effect, the same
@@ -311,8 +342,9 @@ export default function EnvironmentAccess({
     }
 
     setSwitchBusy(field);
+    setGateDraft((draft) => ({ ...draft, [field]: next }));
     try {
-      await toggleEnvironmentStatus(envId, { [field]: next });
+      await setEnvironmentGates(envId, { [field]: next }, transport);
       if (field === "allowlist_check_enabled") {
         toast(
           next
@@ -328,6 +360,13 @@ export default function EnvironmentAccess({
       }
       onChanged?.();
     } catch (err: any) {
+      // Hand the switch back to the record: the server refused, so what the
+      // parent is holding is still the truth.
+      setGateDraft((draft) => {
+        const copy = { ...draft };
+        delete copy[field];
+        return copy;
+      });
       toast(err?.message || "Could not change the switch", "error");
     } finally {
       setSwitchBusy(null);
@@ -482,7 +521,7 @@ export default function EnvironmentAccess({
   }, [load, onChanged]);
 
   const toggleEnabled = async (rule: AccessRule) => {
-    if (!canWrite) return;
+    if (!allowUpdate) return;
     const next = !rule.is_enabled;
     setRules((rows) => rows.map((r) => (r.id === rule.id ? { ...r, is_enabled: next } : r)));
     try {
@@ -499,7 +538,7 @@ export default function EnvironmentAccess({
   };
 
   const removeRule = async (rule: AccessRule) => {
-    if (!canWrite) return;
+    if (!allowDelete) return;
     const ok = await confirmDanger({
       title: "Remove from allow list?",
       html: `<strong>${escHtml(
@@ -519,7 +558,7 @@ export default function EnvironmentAccess({
   };
 
   const openAdd = () => {
-    if (!canWrite) return;
+    if (!allowCreate) return;
     setAddType("email");
     setAddValue("");
     setAddLabel("");
@@ -532,7 +571,7 @@ export default function EnvironmentAccess({
      Optimistic, and rolled back if the write fails, matching how the
      enable/disable switch on the same row behaves. */
   const changeAppliesTo = async (rule: AccessRule, next: AppliesTo) => {
-    if (!canWrite) return;
+    if (!allowUpdate) return;
     const previous = rule.applies_to;
     setRules((rows) => rows.map((r) => (r.id === rule.id ? { ...r, applies_to: next } : r)));
     try {
@@ -631,7 +670,10 @@ export default function EnvironmentAccess({
           </div>
 
           <div className="ea-switches">
-            <div className="ea-switch-card">
+            <div
+              className="ea-switch-card"
+              aria-busy={switchBusy === "allowlist_check_enabled"}
+            >
               <div className="ea-switch-info">
                 <div className="ea-switch-title">Email / domain / IP allow list</div>
                 <div className="ea-switch-desc">Blocks unlisted callers.</div>
@@ -646,18 +688,32 @@ export default function EnvironmentAccess({
               >
                 <input
                   type="checkbox"
-                  checked={!!environment?.allowlist_check_enabled}
-                  disabled={!environment || switchBusy !== null || !canWrite}
+                  checked={gateValue("allowlist_check_enabled")}
+                  disabled={!environment || switchBusy !== null || !allowUpdate}
                   aria-label="Allow-list check"
                   onChange={(e) =>
                     toggleSwitch("allowlist_check_enabled", e.target.checked)
                   }
                 />
-                <div className="toggle-track" />
+                {/* The switch is disabled while its write is in flight, but a
+                    disabled switch only says "can't touch"; the track carries a
+                    spinner so the control itself says "working". */}
+                <div
+                  className={`toggle-track${
+                    switchBusy === "allowlist_check_enabled" ? " is-busy" : ""
+                  }`}
+                >
+                  {switchBusy === "allowlist_check_enabled" && (
+                    <i className="fa-solid fa-spinner fa-spin ea-toggle-spinner" aria-hidden="true" />
+                  )}
+                </div>
               </label>
             </div>
 
-            <div className="ea-switch-card">
+            <div
+              className="ea-switch-card"
+              aria-busy={switchBusy === "custom_field_check_enabled"}
+            >
               <div className="ea-switch-info">
                 <div className="ea-switch-title">Xtend API custom field</div>
                 <div className="ea-switch-desc">Checks a Wrike profile field.</div>
@@ -665,14 +721,22 @@ export default function EnvironmentAccess({
               <label className="toggle-wrap" title="Reserved for the upcoming custom-field check">
                 <input
                   type="checkbox"
-                  checked={!!environment?.custom_field_check_enabled}
-                  disabled={!environment || switchBusy !== null || !canWrite}
+                  checked={gateValue("custom_field_check_enabled")}
+                  disabled={!environment || switchBusy !== null || !allowUpdate}
                   aria-label="Custom field check (phase 2)"
                   onChange={(e) =>
                     toggleSwitch("custom_field_check_enabled", e.target.checked)
                   }
                 />
-                <div className="toggle-track" />
+                <div
+                  className={`toggle-track${
+                    switchBusy === "custom_field_check_enabled" ? " is-busy" : ""
+                  }`}
+                >
+                  {switchBusy === "custom_field_check_enabled" && (
+                    <i className="fa-solid fa-spinner fa-spin ea-toggle-spinner" aria-hidden="true" />
+                  )}
+                </div>
               </label>
             </div>
           </div>
@@ -753,7 +817,7 @@ export default function EnvironmentAccess({
                   />
                 </FilterPopover>
 
-                {canWrite && (
+                {allowCreate && (
                   <button type="button" className="btn btn-primary btn-sm" onClick={openAdd}>
                     <i className="fa-solid fa-plus" aria-hidden="true" />
                     &nbsp;Add entry
@@ -770,7 +834,7 @@ export default function EnvironmentAccess({
                         <th scope="col">Type</th>
                         <th scope="col">Applies to</th>
                         <th scope="col">Switch</th>
-                        {canWrite && (
+                        {allowDelete && (
                           <th scope="col" className="ea-col-actions">
                             Actions
                           </th>
@@ -802,7 +866,7 @@ export default function EnvironmentAccess({
                             <td>
                               <div className="ea-skeleton ea-skeleton-switch" />
                             </td>
-                            {canWrite && (
+                            {allowDelete && (
                               <td className="ea-col-actions">
                                 <div className="ea-skeleton ea-skeleton-btn" />
                               </td>
@@ -839,14 +903,14 @@ export default function EnvironmentAccess({
                                 idPrefix={`surface-${rule.id}`}
                                 value={rule.applies_to}
                                 onChange={(next) => changeAppliesTo(rule, next)}
-                                disabled={!rule.is_enabled || !canWrite}
+                                disabled={!rule.is_enabled || !allowUpdate}
                               />
                             </td>
                             <td>
                               <label
                                 className="toggle-wrap"
                                 title={
-                                  !canWrite
+                                  !allowUpdate
                                     ? "Read-only"
                                     : rule.is_enabled
                                       ? "Switch off to block this entry without deleting it"
@@ -856,14 +920,14 @@ export default function EnvironmentAccess({
                                 <input
                                   type="checkbox"
                                   checked={rule.is_enabled}
-                                  disabled={!canWrite}
+                                  disabled={!allowUpdate}
                                   aria-label={`Access via ${rule.value}`}
                                   onChange={() => toggleEnabled(rule)}
                                 />
                                 <div className="toggle-track" />
                               </label>
                             </td>
-                            {canWrite && (
+                            {allowDelete && (
                               <td className="ea-col-actions">
                                 <button
                                   type="button"
@@ -889,14 +953,14 @@ export default function EnvironmentAccess({
                     </div>
                     <div className="ea-empty-title">Nobody can call this environment yet</div>
                     <div className="ea-empty-desc">
-                      {canWrite
+                      {allowCreate
                         ? <>Until an entry is added here, every API and MCP request to{" "}
                             {envName || "this environment"} is refused. Add an email, a whole
                             company domain, or an office IP range to get started.</>
                         : <>Until an entry is added here, every API and MCP request to{" "}
                             {envName || "this environment"} is refused.</>}
                     </div>
-                    {canWrite && (
+                    {allowCreate && (
                       <button type="button" className="btn btn-primary btn-sm" onClick={openAdd}>
                         <i className="fa-solid fa-plus" aria-hidden="true" />
                         &nbsp;Add the first entry

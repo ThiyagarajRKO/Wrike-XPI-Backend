@@ -198,6 +198,27 @@ export const listPortalEnvironmentsFull = async (
   return body.data as PortalEnvironmentFull[];
 };
 
+/* ── Overview ───────────────────────────────────────────────────────────
+   GET /api/v1/portal/overview — the dashboard summary, gated by the
+   "overview" permission module (src/routes/portal/overview/index.js). Counts
+   only: the endpoint returns no names, ids or credentials, which is what
+   keeps overview:read and environments:read two different capabilities
+   rather than one door and a bigger one. */
+
+export interface PortalOverview {
+  total: number;
+  active: number;
+  inactive: number;
+  visible: number;
+}
+
+export const getPortalOverview = async (token: string): Promise<PortalOverview> => {
+  const res = await portalFetch("/api/v1/portal/overview/", token);
+  const body = await res.json().catch(() => null);
+  if (!body?.success) throw new Error(body?.message || "Failed to load overview");
+  return body.data as PortalOverview;
+};
+
 export interface PortalEnvironmentInput {
   environment_name: string;
   client_id: string;

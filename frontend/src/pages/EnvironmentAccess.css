@@ -211,6 +211,46 @@
   flex-shrink: 0;
 }
 
+/* ── Gate switch, in flight ──────────────────────────────────────────
+   Flipping one of the two security gates is a round trip (plus the parent's
+   reload afterwards), and the input is disabled for the duration. A disabled
+   switch only communicates "can't touch" — this puts the progress inside the
+   control instead: the knob steps aside and the track carries a spinner.
+   Scoped to .ea-switch-card so the enable/disable toggles further down the
+   drawer, and every other .toggle-track in either shell, are untouched. */
+
+.ea-switch-card .toggle-track.is-busy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Inherited by the spinner: readable on the light "off" track… */
+  color: var(--text-secondary);
+}
+
+/* …and on the green "on" track. */
+.ea-switch-card .toggle-wrap input:checked + .toggle-track.is-busy {
+  color: #ffffff;
+}
+
+/* Only one thing fits in a 40×22 track; the knob yields to the spinner. */
+.ea-switch-card .toggle-track.is-busy::before {
+  opacity: 0;
+}
+
+.ea-switch-card .ea-toggle-spinner {
+  position: relative;
+  z-index: 1;
+  font-size: 11px;
+  line-height: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still a spinner, just not a moving one. */
+  .ea-switch-card .ea-toggle-spinner {
+    animation: none;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    TABS
    ═══════════════════════════════════════════════════════════ */

@@ -223,6 +223,22 @@ export default function PortalCachePage({ active, canDelete }: Props) {
             onView={openDetail}
             onDelete={deleteKey}
             onSearch={handleSearch}
+            empty={
+              <div className="dt2-empty">
+                <div className="dt2-empty-icon">
+                  <i className="fa-solid fa-database" aria-hidden="true" />
+                </div>
+                {/* The portal is served only the entries tied to this user's
+                    own environments (src/utils/portalCacheScope.js), so an
+                    empty table says that rather than implying nothing is
+                    cached anywhere. */}
+                <h3>No cache entries for your environments</h3>
+                <p>
+                  Nothing cached for the environments you own matches this pattern.
+                  Shared entries are not listed here.
+                </p>
+              </div>
+            }
           />
         </div>
       </div>

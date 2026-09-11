@@ -86,9 +86,16 @@ export const getCacheValue = async (key) => {
 };
 
 /** Resolves the key list + entries payload GET /cache and GET /cache/detail share. */
-export const listCacheEntries = async ({ pattern: patternInput, limit }) => {
+export const listCacheEntries = async ({
+  pattern: patternInput,
+  limit,
+  filter,
+}) => {
   const pattern = patternInput || DEFAULT_PATTERN;
-  const safeLimit = Math.min(Math.max(parseInt(limit || "200", 10) || 200, 1), MAX_LIST_LIMIT);
+  const safeLimit = Math.min(
+    Math.max(parseInt(limit || "200", 10) || 200, 1),
+    MAX_LIST_LIMIT,
+  );
 
   let keys = [];
   let searchMode = "pattern";
@@ -104,6 +111,12 @@ export const listCacheEntries = async ({ pattern: patternInput, limit }) => {
     keys = allKeys.filter((key) => iLikeIncludes(key, patternInput));
     searchMode = "ilike";
   }
+
+  /* An optional caller-supplied predicate, applied BEFORE the per-key TTL /
+     type / value lookups: the portal passes its ownership filter here
+     (src/utils/portalCacheScope.js), so it never pays to read values for keys
+     it is going to hide. The admin console passes nothing and is unchanged. */
+  if (typeof filter === "function") keys = keys.filter((key) => filter(key));
 
   keys = keys.slice(0, safeLimit);
 

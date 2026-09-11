@@ -22,7 +22,8 @@ export const MODULES = [
   {
     key: "overview",
     label: "Overview",
-    description: "The dashboard summary: counts and recent activity.",
+    description:
+      "The dashboard summary: how many environments the user has, and how many are active.",
     actions: ["read"],
   },
   {
@@ -36,6 +37,9 @@ export const MODULES = [
     label: "Environment Access",
     description:
       "The email/domain/IP allow list controlling who can call the API.",
+    // All four, one per portal route: read lists the allow list, create adds
+    // an entry, update edits/re-enables one or flips a security switch, delete
+    // removes one (src/routes/portal/environmentAccess/index.js).
     actions: ALL,
   },
   {

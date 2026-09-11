@@ -1,5 +1,9 @@
 import models from "../../models";
-import { MODULES, emptyMatrix, normaliseMatrix } from "../utils/portalPermissionCatalog";
+import {
+  MODULES,
+  emptyMatrix,
+  normaliseMatrix,
+} from "../utils/portalPermissionCatalog";
 
 /**
  * Module-level permissions for portal users — the storage side. Vocabulary
@@ -8,15 +12,23 @@ import { MODULES, emptyMatrix, normaliseMatrix } from "../utils/portalPermission
 
 const rowsToMatrix = (rows) => {
   const result = emptyMatrix();
+  const rowByModule = Object.fromEntries(
+    (rows || []).map((row) => [row.module, row]),
+  );
 
-  for (const row of rows) {
-    if (!result[row.module]) continue; // a module later removed from the catalog
-    result[row.module] = {
-      read: !!row.can_read,
-      create: !!row.can_create,
-      update: !!row.can_update,
-      delete: !!row.can_delete,
-    };
+  for (const mod of MODULES) {
+    const row = rowByModule[mod.key];
+    // No row yet — the all-false default already stands for this module.
+    if (!row) continue;
+
+    // Only the actions this module declares. A row written while the
+    // catalogue said otherwise (Environment Access carried all four before it
+    // was narrowed to read-only) must not resurrect a grant that no longer
+    // exists, so the catalogue is what decides on read as well as on write —
+    // the same rule normaliseMatrix applies to what gets stored.
+    for (const action of mod.actions) {
+      result[mod.key][action] = !!row[`can_${action}`];
+    }
   }
 
   return result;

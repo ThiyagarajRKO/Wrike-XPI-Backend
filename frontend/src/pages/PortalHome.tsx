@@ -5,12 +5,14 @@ import {
   createPortalEnvironment,
   deletePortalEnvironment,
   getMyPortalPermissions,
+  getPortalOverview,
   getPortalRole,
   getPortalToken,
   listPortalEnvironmentsFull,
   updatePortalEnvironment,
   type PortalEnvironmentFull,
   type PortalEnvironmentInput,
+  type PortalOverview,
   type PortalPermissionMatrix,
 } from "../lib/portalAuthApi";
 import { fetchAppConfig, DEFAULT_CONFIG, type AppConfig } from "../lib/appConfig";
@@ -19,6 +21,7 @@ import EnvBadge from "../components/EnvBadge";
 import BuildTag from "../components/BuildTag";
 import PortalActivityPage from "./PortalActivityPage";
 import PortalCachePage from "./PortalCachePage";
+import PortalEnvironmentAccess from "./PortalEnvironmentAccess";
 import { PortalEnvironmentsTable } from "./PortalEnvironmentsTable";
 import "./PortalHome.css";
 
@@ -216,10 +219,17 @@ export default function PortalHome() {
   const can = (moduleKey: string, action: "read" | "create" | "update" | "delete") =>
     canPortal(permissions, moduleKey, action);
 
+  const canSeeOverview = can("overview", "read");
   const canSeeEnvironments = can("environments", "read");
   const canSeeActivity = can("activity_logs", "read");
   const canSeeCache = can("cache", "read");
   const canSeeEnvironmentAccess = can("environment_access", "read");
+
+  /** A portal user can legitimately be created with nothing granted; the
+      shell then has no page to show, so it says so instead of rendering an
+      empty frame. */
+  const hasAnyAccess =
+    canSeeOverview || canSeeEnvironments || canSeeActivity || canSeeCache;
 
   /* ── Session guard (mirrors the EJS inline script exactly) ──────────── */
   useEffect(() => {
@@ -263,25 +273,73 @@ export default function PortalHome() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, permissionsLoaded, canSeeEnvironments]);
 
-  // If the current page requires a permission the matrix doesn't grant
-  // (a stale #hash, or an admin revoked access mid-session), bounce to
-  // Overview rather than rendering a page with no data and no actions.
+  /* The dashboard counts come from their own endpoint, gated by
+     requirePortalPermission("overview", "read") — deliberately not derived
+     from the Environments list, which needs a different grant. Not fetched
+     at all without the grant: portalFetch treats any 403 as an expired
+     session and would sign the user out. */
+  const [overview, setOverview] = useState<PortalOverview | null>(null);
+
+  useEffect(() => {
+    if (!token || !permissionsLoaded || !canSeeOverview) return;
+
+    let cancelled = false;
+    getPortalOverview(token)
+      .then((data) => {
+        if (!cancelled) setOverview(data);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, permissionsLoaded, canSeeOverview, dataRefreshKey]);
+
+  // If the current page requires a permission the matrix doesn't grant (a
+  // stale #hash, or an admin revoked access mid-session), move to the first
+  // page this user can actually use. With nothing granted at all there is no
+  // such page, so the shell's own "no access" panel takes over instead.
   useEffect(() => {
     if (!permissionsLoaded) return;
-    if (activePage === "environments" && !canSeeEnvironments) setActivePage("overview");
-    if (activePage === "activity" && !canSeeActivity) setActivePage("overview");
-    if (activePage === "cache" && !canSeeCache) setActivePage("overview");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [permissionsLoaded, activePage, canSeeEnvironments, canSeeActivity, canSeeCache]);
 
-  const stats = useMemo(() => {
-    const total = environments.length;
-    const active = environments.filter((e) => e.is_active).length;
-    const visible = environments.filter((e) => e.is_visible).length;
-    return { total, active, inactive: total - active, visible };
-  }, [environments]);
+    const granted: Record<PageId, boolean> = {
+      overview: canSeeOverview,
+      environments: canSeeEnvironments,
+      activity: canSeeActivity,
+      cache: canSeeCache,
+    };
+    if (granted[activePage]) return;
+
+    const fallback = (["overview", "environments", "activity", "cache"] as PageId[]).find(
+      (page) => granted[page],
+    );
+    if (fallback) setActivePage(fallback);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    permissionsLoaded,
+    activePage,
+    canSeeOverview,
+    canSeeEnvironments,
+    canSeeActivity,
+    canSeeCache,
+  ]);
 
   const recentEnvs = environments.slice(0, 5);
+
+  /* ── Environment API access drawer (environment_access:read) ─────────
+     Opened from an environment row's "API Access Scope" action, which the
+     table only renders when the matrix grants that module read. The drawer
+     itself is read-only — see PortalEnvironmentAccess.tsx. */
+  const [accessEnvId, setAccessEnvId] = useState<string | null>(null);
+  const [accessEnvName, setAccessEnvName] = useState<string | null>(null);
+  const [accessOpen, setAccessOpen] = useState(false);
+
+  function openAccessDrawer(env: PortalEnvironmentFull) {
+    setAccessEnvId(env.id);
+    setAccessEnvName(env.environment_name);
+    setAccessOpen(true);
+  }
 
   /* ── Add/Edit Environment modal ────────────────────────────────────── */
   const [envModalOpen, setEnvModalOpen] = useState(false);
@@ -535,15 +593,17 @@ export default function PortalHome() {
 
         <div className="sidebar-nav">
           <div className="nav-group-label">Workspace</div>
-          <div
-            className={`nav-item${activePage === "overview" ? " active" : ""}`}
-            onClick={() => handleNav("overview")}
-          >
-            <span className="ni">
-              <i className="fa-solid fa-chart-pie" />
-            </span>
-            <span className="nl">Overview</span>
-          </div>
+          {canSeeOverview && (
+            <div
+              className={`nav-item${activePage === "overview" ? " active" : ""}`}
+              onClick={() => handleNav("overview")}
+            >
+              <span className="ni">
+                <i className="fa-solid fa-chart-pie" />
+              </span>
+              <span className="nl">Overview</span>
+            </div>
+          )}
           {canSeeEnvironments && (
             <div
               className={`nav-item${activePage === "environments" ? " active" : ""}`}
@@ -628,7 +688,24 @@ export default function PortalHome() {
         </div>
 
         <div id="content">
+          {/* ══════ NO ACCESS YET ══════ */}
+          {!hasAnyAccess && (
+            <div className="page active" id="page-no-access">
+              <div className="empty-state">
+                <div className="empty-state-icon">
+                  <i className="fa-solid fa-user-lock" />
+                </div>
+                <h3>No portal access yet</h3>
+                <p>
+                  Your account is active, but no areas of the portal have been shared with you
+                  yet. Ask an administrator to grant what you need.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* ══════ OVERVIEW PAGE ══════ */}
+          {canSeeOverview && (
           <div className={`page${activePage === "overview" ? " active" : ""}`} id="page-overview">
             <div className="section-header">
               <div>
@@ -643,7 +720,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-layer-group" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.total : "—"}</div>
+                  <div className="stat-value">{overview ? overview.total : "—"}</div>
                   <div className="stat-label">Total Environments</div>
                 </div>
               </div>
@@ -652,7 +729,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-circle-check" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.active : "—"}</div>
+                  <div className="stat-value">{overview ? overview.active : "—"}</div>
                   <div className="stat-label">Active</div>
                 </div>
               </div>
@@ -661,7 +738,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-circle-xmark" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.inactive : "—"}</div>
+                  <div className="stat-value">{overview ? overview.inactive : "—"}</div>
                   <div className="stat-label">Inactive</div>
                 </div>
               </div>
@@ -670,7 +747,7 @@ export default function PortalHome() {
                   <i className="fa-solid fa-eye" />
                 </div>
                 <div className="stat-body">
-                  <div className="stat-value">{loaded ? stats.visible : "—"}</div>
+                  <div className="stat-value">{overview ? overview.visible : "—"}</div>
                   <div className="stat-label">Visible</div>
                 </div>
               </div>
@@ -750,6 +827,7 @@ export default function PortalHome() {
             </div>
             )}
           </div>
+          )}
 
           {/* ══════ ENVIRONMENTS PAGE ══════ */}
           {canSeeEnvironments && (
@@ -774,8 +852,10 @@ export default function PortalHome() {
                   loading={!loaded}
                   canUpdate={can("environments", "update")}
                   canDelete={can("environments", "delete")}
+                  canSeeAccess={canSeeEnvironmentAccess}
                   onEdit={openEnvModal}
                   onDelete={(env) => handleDeleteEnvironment(env.id, env.environment_name)}
+                  onManageAccess={openAccessDrawer}
                   onAdd={() => openEnvModal(null)}
                 />
               </div>
@@ -802,6 +882,19 @@ export default function PortalHome() {
           )}
         </div>
       </div>
+
+      {/* ════════════ ENVIRONMENT API ACCESS DRAWER ════════════ */}
+      <PortalEnvironmentAccess
+        envId={accessEnvId}
+        envName={accessEnvName}
+        environment={environments.find((e) => e.id === accessEnvId) || null}
+        open={accessOpen}
+        onClose={() => setAccessOpen(false)}
+        onChanged={loadEnvironments}
+        canCreate={can("environment_access", "create")}
+        canUpdate={can("environment_access", "update")}
+        canDelete={can("environment_access", "delete")}
+      />
 
       {/* ════════════ REDIRECT URL SUCCESS MODAL ════════════ */}
       <div className={`modal-backdrop${redirectModalOpen ? " open" : ""}`}>

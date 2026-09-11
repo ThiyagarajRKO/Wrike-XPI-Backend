@@ -1,5 +1,6 @@
 import { portalAuthRoute } from "./auth";
 import { portalUsersRoute } from "./users";
+import { portalOverviewRoute } from "./overview";
 import { portalEnvironmentsRoute } from "./environments";
 import { portalActivityRoute } from "./activity";
 import { portalCacheRoute } from "./cache";
@@ -33,7 +34,10 @@ const PortalChangePasswordPage = (req, reply) => {
 
 const PortalDashboardPage = (req, reply) => {
   try {
-    return reply.sendFile("portal-dashboard.html", process.cwd() + "/public/app");
+    return reply.sendFile(
+      "portal-dashboard.html",
+      process.cwd() + "/public/app",
+    );
   } catch (err) {
     return reply.code(500).send({ error: "Failed to load dashboard" });
   }
@@ -65,10 +69,13 @@ export const portalRoute = (fastify, opts, done) => {
 export const portalApiRoute = (fastify, opts, done) => {
   fastify.register(portalAuthRoute, { prefix: "/auth" });
   fastify.register(portalUsersRoute, { prefix: "/users" });
+  fastify.register(portalOverviewRoute, { prefix: "/overview" });
   fastify.register(portalEnvironmentsRoute, { prefix: "/environments" });
   fastify.register(portalActivityRoute, { prefix: "/activity-logs" });
   fastify.register(portalCacheRoute, { prefix: "/cache" });
-  fastify.register(portalEnvironmentAccessRoute, { prefix: "/environment-access" });
+  fastify.register(portalEnvironmentAccessRoute, {
+    prefix: "/environment-access",
+  });
 
   done();
 };
